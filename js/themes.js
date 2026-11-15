@@ -27,6 +27,11 @@
     { id: 'lilac', name: 'Lilac', blurb: 'Lavender and plum',
       light: { bg: '#f5f2f7', surface: '#fffdff', surface2: '#ece6f0', line: '#e0d8e6', lineStrong: '#c8bdd1', text: '#251f2b', muted: '#62586b', faint: '#8d8396', accent: '#6f45a0', accentInk: '#ffffff', poly: '#3b8070', danger: '#b4403a' },
       dark:  { bg: '#18151d', surface: '#201c26', surface2: '#29242f', line: '#322c39', lineStrong: '#453d4e', text: '#f1ecf5', muted: '#aba2b5', faint: '#7c7387', accent: '#cba9f0', accentInk: '#18151d', poly: '#7fc4b0', danger: '#ee7f74' } },
+    /* High contrast: pure black and white, strong borders, every colour well above WCAG AAA
+       for text. Borders are drawn thicker in this palette (css/styles.css). */
+    { id: 'contrast', name: 'High contrast', blurb: 'Black, white and bold borders',
+      light: { bg: '#ffffff', surface: '#ffffff', surface2: '#ececec', line: '#767676', lineStrong: '#111111', text: '#000000', muted: '#1f1f1f', faint: '#474747', accent: '#0033b3', accentInk: '#ffffff', poly: '#8a3a00', ok: '#00662c', danger: '#b0001e' },
+      dark:  { bg: '#000000', surface: '#0b0b0b', surface2: '#1c1c1c', line: '#8f8f8f', lineStrong: '#ebebeb', text: '#ffffff', muted: '#ebebeb', faint: '#c4c4c4', accent: '#ffd60a', accentInk: '#000000', poly: '#7dd8ff', ok: '#5cf08c', danger: '#ff7676' } },
   ];
   const byId = Object.fromEntries(PALETTES.map((p) => [p.id, p]));
   const DEFAULT = 'luthier';
@@ -79,6 +84,25 @@
     document.querySelectorAll('meta[name="theme-color"]').forEach((m) => { m.setAttribute('content', bg); m.removeAttribute('media'); });
   }
 
+  /* Accessibility and layout choices that change how the page is drawn. Applied here too,
+     before the first paint, so a large text size or a left-handed layout never flashes in
+     at the default first. Limits are shared with the store (js/store.js). */
+  const A11Y = {
+    textScale: { min: 0.8, max: 1.6, step: 0.1, def: 1 },
+    standScale: { min: 1.2, max: 2, step: 0.1, def: 1.4 },
+  };
+  const clampTo = (v, r) => (Number.isFinite(v) ? Math.min(r.max, Math.max(r.min, Math.round(v * 100) / 100)) : r.def);
+  function applyA11y(s) {
+    s = s || {};
+    const de = document.documentElement;
+    de.style.setProperty('--fs-user', String(clampTo(s.textScale, A11Y.textScale)));
+    de.style.setProperty('--stand', String(clampTo(s.standScale, A11Y.standScale)));
+    const flag = (name, on) => { if (on) de.setAttribute(name, ''); else de.removeAttribute(name); };
+    flag('data-stand', s.stand === true);
+    flag('data-cvd', s.cvd === true);
+    flag('data-lefty', s.leftHanded === true);
+  }
+
   /* Run now, in <head>: inject the palette CSS and apply the saved choice before paint. */
   if (root.document) {
     const style = document.createElement('style');
@@ -88,7 +112,7 @@
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem('metronome.v1.settings') || '{}') || {}; } catch (e) {}
     /* 2.0 introduced Luthier as the default. Visitors still on the old default (Studio) move
-       to it once; anyone can switch back in Preferences, and that choice is then kept. */
+       to it once; anyone can switch back in Settings, and that choice is then kept. */
     try {
       if (!localStorage.getItem('app.v2.palette')) {
         if (!saved.palette || saved.palette === 'studio') { saved.palette = DEFAULT; if (Object.keys(saved).length > 1) localStorage.setItem('metronome.v1.settings', JSON.stringify(saved)); }
@@ -96,11 +120,12 @@
       }
     } catch (e) {}
     apply(saved.theme, saved.palette);
+    applyA11y(saved);
     if (mq) {
       const onChange = () => { if (current.mode === 'auto') apply('auto', current.palette); };
       mq.addEventListener ? mq.addEventListener('change', onChange) : mq.addListener(onChange);
     }
   }
 
-  MN.themes = { PALETTES, MODES, DEFAULT, tokens, css, apply, resolveMode, get current() { return current; } };
+  MN.themes = { PALETTES, MODES, DEFAULT, A11Y, clampTo, tokens, css, apply, applyA11y, resolveMode, get current() { return current; } };
 })(typeof window !== 'undefined' ? window : globalThis);

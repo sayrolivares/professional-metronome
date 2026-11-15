@@ -129,11 +129,31 @@
     window.addEventListener('pagehide', () => store.flush());
 
     /* ================= theme, mode, tabs ================= */
-    /* ---- preferences: theme mode, palette, note names ---- */
-    const T = MN.terms;
-    T.set(S().terms);
+    /* ---- preferences: theme, palette, language and music notation ---- */
+    const T = MN.notation, I = MN.i18n;
     $$('#themeSeg button').forEach((b) => b.addEventListener('click', () => store.set({ theme: b.dataset.v })));
-    $$('#termsSeg button').forEach((b) => b.addEventListener('click', () => store.set({ terms: b.dataset.v })));
+    const langSelect = $('#langSelect');
+    for (const l of T.LANGS) langSelect.append(el('option', { value: l.id, text: l.name, lang: l.id }));   // each in its own language
+    langSelect.addEventListener('change', () => store.set({ lang: langSelect.value }));
+    /* systems in the order a musician would look for them, each named in the interface language */
+    const SYSTEM_NAMES = { us: 'American', uk: 'British', de: 'German', nl: 'Dutch', it: 'Italian', fr: 'French', es: 'Spanish' };
+    const notationList = $('#notationList');
+    function sampleLine(id) { const x = T.systemSample(id); return `${x.notes} · ${x.sharp}, ${x.flat} · ${x.quarter}, ${x.eighth}`; }
+    function renderNotation(s) {
+      notationList.textContent = '';
+      const own = T.langInfo(s.lang).system;
+      const opts = [['auto', 'Same as the language', own]].concat(T.SYSTEM_IDS.map((id) => [id, SYSTEM_NAMES[id], id]));
+      for (const [id, name, sys] of opts) {
+        const on = s.notation === id;
+        notationList.append(el('button', { class: 'notation-opt' + (id === 'auto' ? ' auto' : '') + (on ? ' on' : ''), type: 'button', role: 'radio', 'aria-checked': String(on), dataset: { v: id },
+          onclick: () => store.set({ notation: id }) },
+          el('span', { class: 'on-name', text: id === 'auto' ? name : name }),
+          el('span', { class: 'on-sample', translate: 'no', text: (id === 'auto' ? I.tr(SYSTEM_NAMES[own]) + ' · ' : '') + sampleLine(sys) })));
+      }
+      /* the example: what the current setup shows, glosses included */
+      $('#termsExample').textContent = [T.pitchClass(11, false, true), T.pitchClass(10, true, true), T.pitchClass(6, false, true)].join(', ')
+        + ' · ' + [T.note(4), T.note(8), T.note(16)].join(', ');
+    }
     const palettesEl = $('#palettes');
     const checkIcon = () => { const c = svg('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 3, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }); c.append(svg('path', { d: 'M5 12.5l4.5 4.5L19 7.5' })); return c; };
     function swatch(id, mode) {
@@ -152,7 +172,6 @@
     }
     function renderPrefs(s) {
       $$('#themeSeg button').forEach((b) => b.classList.toggle('on', b.dataset.v === s.theme));
-      $$('#termsSeg button').forEach((b) => b.classList.toggle('on', b.dataset.v === s.terms));
       const mode = MN.themes.resolveMode(s.theme);
       palettesEl.innerHTML = '';
       for (const p of MN.themes.PALETTES) {
@@ -160,9 +179,47 @@
           help: `${p.name}::${p.blurb}. Available in light and dark.`, onclick: () => store.set({ palette: p.id }) },
           swatch(p.id, mode), el('span', { class: 'pn', text: p.name }), el('span', { class: 'pb', text: p.blurb }), el('span', { class: 'check' }, checkIcon())));
       }
-      $('#termsExample').textContent = [4, 8, 16, 2].map((d, i) => (i ? T.note(d) : T.note(d, { capital: true }))).join(', ') + '.';
+      langSelect.value = s.lang;
+      renderNotation(s);
     }
-    $('#prefs-dlg').addEventListener('dlg-open', () => renderPrefs(S()));
+    $('#prefs-dlg').addEventListener('dlg-open', () => { renderPrefs(S()); renderAccess(S()); });
+
+    /* ---- Settings: section chips scroll the dialog to their section ---- */
+    $$('#setNav [data-go]').forEach((b) => b.addEventListener('click', () => {
+      const box = $('#prefs-dlg .dlg-box'), target = $('#' + b.dataset.go);
+      box.scrollTo({ top: target.offsetTop - 8, behavior: window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    }));
+
+    /* ---- Settings: accessibility, left-handed tuner, floating metronome ---- */
+    const A = MN.themes.A11Y;
+    const stepScale = (key, range, dir) => {
+      const v = MN.themes.clampTo(Math.round((S()[key] + dir * range.step) * 10) / 10, range);
+      if (v !== S()[key]) store.set({ [key]: v });
+    };
+    $('#fsMinus').addEventListener('click', () => stepScale('textScale', A.textScale, -1));
+    $('#fsPlus').addEventListener('click', () => stepScale('textScale', A.textScale, 1));
+    $('#standMinus').addEventListener('click', () => stepScale('standScale', A.standScale, -1));
+    $('#standPlus').addEventListener('click', () => stepScale('standScale', A.standScale, 1));
+    $('#standSw').addEventListener('click', () => store.set({ stand: !S().stand }));
+    $('#cvdSw').addEventListener('click', () => store.set({ cvd: !S().cvd }));
+    $('#contrastSw').addEventListener('click', () => {
+      const s = S();
+      if (s.palette === 'contrast') store.set({ palette: s.prevPalette || MN.themes.DEFAULT });
+      else store.set({ palette: 'contrast', prevPalette: s.palette });
+    });
+    for (const id of ['#leftySw', '#leftySw2']) $(id).addEventListener('click', () => store.set({ leftHanded: !S().leftHanded }));
+    const swOn = (sel, on) => { const b = $(sel); b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); };
+    function renderAccess(s) {
+      const pc = (v) => Math.round(v * 100) + '%';
+      $('#fsVal').textContent = pc(s.textScale);
+      $('#fsMinus').disabled = s.textScale <= A.textScale.min; $('#fsPlus').disabled = s.textScale >= A.textScale.max;
+      $('#standVal').textContent = pc(s.standScale);
+      $('#standMinus').disabled = s.standScale <= A.standScale.min; $('#standPlus').disabled = s.standScale >= A.standScale.max;
+      $('#standSizeRow').classList.toggle('off', !s.stand);
+      swOn('#standSw', s.stand); swOn('#cvdSw', s.cvd); swOn('#contrastSw', s.palette === 'contrast');
+      swOn('#leftySw', s.leftHanded); swOn('#leftySw2', s.leftHanded);
+      swOn('#floatSw', s.floating); swOn('#floatSw2', s.floating);
+    }
     if (window.matchMedia) {
       const mq = window.matchMedia('(prefers-color-scheme: dark)');
       const onSys = () => { if (S().theme === 'auto') renderPrefs(S()); };
@@ -285,9 +342,20 @@
       if (runStartBpm === null) runStartBpm = S().bpm;
     };
     const pause = () => engine.stop();
+    /* The log keeps its configuration in English ("sixteenths swing, trainer 60→100") and
+       shows it in the language in use. */
+    const SUB_KEYS = { 1: 'quarters', 2: 'eighths', 3: 'triplets', 4: 'sixteenths', 6: 'sextuplets', 8: 'thirty-seconds' };
+    const SUB_FROM = { quarters: 1, crotchets: 1, eighths: 2, quavers: 2, triplets: 3, sixteenths: 4, semiquavers: 4, sextuplets: 6, 'thirty-seconds': 8, demisemiquavers: 8 };
+    function configText(config) {
+      return String(config || '').split(', ').map((part) => {
+        const m = /^([a-z-]+)(?: \([^)]*\))?(?: (swing|shuffle|dotted))?$/.exec(part);
+        if (m && SUB_FROM[m[1]]) return T.subName(SUB_FROM[m[1]]) + (m[2] ? ' ' + I.tr(m[2]).toLowerCase() : '');
+        return I.tr(part);
+      }).join(', ');
+    }
     const logRun = (s, dur) => {
       const parts = [];
-      if (s.subdivision > 1) parts.push(T.subName(s.subdivision) + (s.feel !== 'straight' && s.subdivision % 2 === 0 ? ' ' + s.feel : ''));
+      if (s.subdivision > 1) parts.push(SUB_KEYS[s.subdivision] + (s.feel !== 'straight' && s.subdivision % 2 === 0 ? ' ' + s.feel : ''));
       if (s.trainer.enabled) parts.push(`trainer ${s.trainer.start}→${s.trainer.target}`);
       if (s.progressive.enabled) parts.push('progressive');
       if (s.silent.enabled) parts.push(`silent ${s.silent.play}/${s.silent.silence}`);
@@ -360,7 +428,9 @@
       curBeat = -1;
     }
     let curBeat = -1, lastBeatTime = 0, lastBeatDur = 0.5, beatParity = 0;
+    const resetHooks = [];
     function resetVisual() {
+      for (const fn of resetHooks) { try { fn(); } catch (e) { console.error(e); } }
       markers.forEach((m) => m.classList.remove('on', 'muted-bar', 'countin'));
       labels.forEach((l) => l && l.classList.remove('on', 'muted-bar'));
       for (const k in subDots) subDots[k].classList.remove('on');
@@ -403,19 +473,27 @@
       if (S().visual === 'off') return;
       polyMarkers.forEach((m, i) => m.classList.toggle('on', i === ev.idx && !ev.silent));
     }
+    /* The visual events are taken from the engine here and handed to the ring and to anyone
+       listening (the floating metronome). pump() runs on this page's animation frames, and
+       also on the pop-out window's frames: a page in a background tab gets no frames of its
+       own, but the window floating over it does. */
+    const visualListeners = new Set();
+    function pump() {
+      if (!engine.ctx) return;
+      const lat = engine.ctx.outputLatency || engine.ctx.baseLatency || 0;
+      const now = engine.ctx.currentTime - lat;
+      for (const ev of engine.drain(now)) {
+        if (ev.type === 'beat') onBeat(ev); else if (ev.type === 'sub') onSub(ev); else onPoly(ev);
+        for (const fn of visualListeners) { try { fn(ev); } catch (e) { console.error(e); } }
+      }
+      if (pendArm && engine.running && S().visual !== 'off') {
+        const p = Math.min(1, Math.max(0, (now - lastBeatTime) / lastBeatDur));
+        const ang = 34 * Math.cos(Math.PI * p) * (beatParity ? 1 : -1);
+        pendArm.style.transform = pendBob.style.transform = `rotate(${ang}deg)`;
+      }
+    }
     function frame() {
-      try {
-        if (engine.ctx) {
-          const lat = engine.ctx.outputLatency || engine.ctx.baseLatency || 0;
-          const now = engine.ctx.currentTime - lat;
-          for (const ev of engine.drain(now)) { if (ev.type === 'beat') onBeat(ev); else if (ev.type === 'sub') onSub(ev); else onPoly(ev); }
-          if (pendArm && engine.running && S().visual !== 'off') {
-            const p = Math.min(1, Math.max(0, (now - lastBeatTime) / lastBeatDur));
-            const ang = 34 * Math.cos(Math.PI * p) * (beatParity ? 1 : -1);
-            pendArm.style.transform = pendBob.style.transform = `rotate(${ang}deg)`;
-          }
-        }
-      } catch (e) { console.error(e); }
+      try { pump(); } catch (e) { console.error(e); }
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
@@ -531,7 +609,7 @@
     };
     for (const sd of R.SUBDIVISIONS) {
       subPicker.append(el('button', { class: 'sub-btn', dataset: { n: sd.n }, onclick: () => store.set({ subdivision: sd.n, subPattern: new Array(sd.n).fill(1) }) },
-        noteIcon(sd.n), el('span', { class: 'sl1' }), el('span', { class: 'sl2' })));
+        noteIcon(sd.n), el('span', { class: 'sl1', translate: 'no' }), el('span', { class: 'sl2', translate: 'no' })));
     }
     $$('#feelSeg button').forEach((b) => b.addEventListener('click', () => store.set({ feel: b.dataset.v })));
     $('#subVol').addEventListener('input', (e) => store.set({ subVolume: +e.target.value }));
@@ -539,14 +617,14 @@
     function renderSubPattern(s) {
       subPattern.innerHTML = '';
       const n = s.subdivision; const off = R.subOffsets(n, s.feel);
-      const names = { 2: ['1', '&'], 3: ['1', 'trip', 'let'], 4: ['1', 'e', '&', 'a'] };
+      const names = { 2: I.tr('1 &').split(' '), 3: I.tr('1 trip let').split(' '), 4: I.tr('1 e & a').split(' ') };
       for (let i = 0; i < n; i++) {
         const lvl = i === 0 ? 1 : (s.subPattern[i] === undefined ? 1 : s.subPattern[i]);
         const c = el('button', { class: 'sub-cell' + (i === 0 ? ' main' : ''), dataset: { level: lvl }, 'aria-label': i === 0 ? 'Beat' : `Pulse ${i + 1}: ${['muted', 'normal', 'accented'][lvl]}`, onclick: () => {
           if (i === 0) return;
           const p = S().subPattern.slice(); while (p.length < n) p.push(1);
           p[i] = p[i] === 1 ? 2 : p[i] === 2 ? 0 : 1; store.set({ subPattern: p });
-        } }, el('span', { class: 'pos', text: names[n] ? names[n][i] : (i === 0 ? '1' : '·') }));
+        } }, el('span', { class: 'pos', translate: 'no', text: names[n] && names[n][i] ? names[n][i] : (i === 0 ? '1' : '·') }));
         c.style.flexGrow = String(((i + 1 < n ? off[i + 1] : 1) - off[i]) * n);
         subPattern.append(c);
       }
@@ -561,14 +639,14 @@
           const a = S().accents.slice(); a[i] = (a[i] + 3) % 4; store.set({ accents: a });
         } }, el('span', { class: 'bar' }), el('span', { class: 'n', text: i + 1 }))));
     }
-    $('#savePattern').addEventListener('click', () => { const n = $('#patternName').value.trim() || `${S().accents.length}-beat pattern`; store.saveAccentPattern(n); $('#patternName').value = ''; renderPatterns(); toast(`Saved pattern “${n}”`); });
+    $('#savePattern').addEventListener('click', () => { const n = $('#patternName').value.trim() || I.tr(`${S().accents.length}-beat pattern`); store.saveAccentPattern(n); $('#patternName').value = ''; renderPatterns(); toast(`Saved pattern “${n}”`); });
     $('#resetPattern').addEventListener('click', () => store.set({ accents: R.defaultAccents(S().sig) }));
     function renderPatterns() {
       const list = $('#patternList'); list.innerHTML = '';
       const bpb = R.beatsPerBar(S().sig);
       for (const p of store.accentPatterns) {
         const fits = p.beats === bpb;
-        list.append(el('div', { class: 'item' }, el('div', {}, el('div', { text: p.name }), el('div', { class: 'meta', text: `${p.beats} beats · ${p.accents.map((a) => '·-=≡'[a]).join(' ')}` })),
+        list.append(el('div', { class: 'item' }, el('div', {}, el('div', { text: p.name, translate: 'no' }), el('div', { class: 'meta', text: `${p.beats} beats · ${p.accents.map((a) => '·-=≡'[a]).join(' ')}` })),
           el('div', { class: 'acts' },
             el('button', { class: 'btn small ghost', text: fits ? 'Use' : `needs ${p.beats} beats`, disabled: !fits, help: fits ? 'Use pattern::Apply it to the current meter.' : `Needs ${p.beats} beats::Switch to a meter with ${p.beats} beats per bar to use this pattern.`, onclick: () => store.set({ accents: p.accents.slice() }) }),
             el('button', { class: 'btn small ghost danger', text: 'Delete', onclick: () => { store.deleteAccentPattern(p.id); renderPatterns(); } }))));
@@ -591,7 +669,7 @@
       const sel = el('select', { 'aria-label': r.label + ' voice' });
       for (const v of MN.sounds.VOICES) sel.append(el('option', { value: v.id, text: v.name }));
       const row = el('div', { class: 'role-row', dataset: { key: r.key } },
-        el('div', { class: 'rinfo', help: r.help }, el('div', { class: 'rn', text: r.label }), el('div', { class: 'rs' })),
+        el('div', { class: 'rinfo', help: r.help }, el('div', { class: 'rn', text: r.label }), el('div', { class: 'rs', translate: 'no' })),
         sel,
         el('button', { class: 'preview-btn', 'aria-label': 'Listen to the ' + r.label.toLowerCase() + ' voice', help: `Listen::Play the ${r.label.toLowerCase()} voice once.`, onclick: () => engine.preview(S()[r.key], r.role) }, playIcon()));
       sel.addEventListener('change', () => {
@@ -606,7 +684,7 @@
         const row = roleRows.querySelector(`[data-key="${r.key}"]`);
         const sel = row.querySelector('select');
         if (sel.value !== s[r.key]) sel.value = s[r.key];
-        row.querySelector('.rs').textContent = r.status(s);
+        row.querySelector('.rs').textContent = I.tr(r.status(s));
         row.classList.toggle('idle', r.idle(s));
       }
     }
@@ -619,22 +697,22 @@
     }
     const sliderRow = (label, key, min, max, fmtV, parentSel, help) => {
       const inp = el('input', { type: 'range', min, max, step: 0.01, 'aria-label': label, help });
-      const val = el('b');
+      const val = el('b', { translate: 'no' });          // values are formatted below, in the language in use
       inp.addEventListener('input', () => store.set({ [key]: +inp.value }));
       $(parentSel).append(el('div', { class: 'slider-row' }, el('span', { text: label }), inp, val));
       return (s) => { inp.value = s[key]; val.textContent = fmtV(s[key]); inp.style.setProperty('--fill', ((s[key] - min) / (max - min)) * 100 + '%'); };
     };
     const pct = (v) => Math.round(v * 100) + '%';
-    const panF = (v) => (Math.abs(v) < 0.03 ? 'C' : (v < 0 ? 'L' : 'R') + Math.round(Math.abs(v) * 100));
+    const panF = (v) => (Math.abs(v) < 0.03 ? I.tr('pan:C') : I.tr(v < 0 ? 'pan:L' : 'pan:R') + Math.round(Math.abs(v) * 100));
     const levelRenders = [
-      sliderRow('Master', 'masterVolume', 0, 1, pct, '#levels', 'Master::Overall loudness, including the tuning tones.'),
+      sliderRow('Master', 'masterVolume', 0, 2, pct, '#levels', 'Master::Overall loudness, including the tuning tones, up to 200%.'),
       sliderRow('Accent', 'accentVolume', 0.3, 1.3, pct, '#levels', 'Accent::How much louder strong and medium beats are than normal beats.'),
       sliderRow('Subdivision', 'subVolume', 0, 1, pct, '#levels', 'Subdivision::Loudness of the pulses between beats.'),
       sliderRow('Polyrhythm', 'polyVolume', 0, 1, pct, '#levels', 'Polyrhythm::Loudness of the second rhythm.'),
       sliderRow('Beat pan', 'panBeat', -1, 1, panF, '#space', 'Beat pan::Left–right position of beats, accents and the count-in.'),
       sliderRow('Subdivision pan', 'panSub', -1, 1, panF, '#space', 'Subdivision pan::Left–right position of the subdivision pulses. Panning layers apart makes them easy to tell apart on headphones.'),
       sliderRow('Polyrhythm pan', 'panPoly', -1, 1, panF, '#space', 'Polyrhythm pan::Left–right position of the polyrhythm voice.'),
-      sliderRow('Room', 'room', 0, 0.5, (v) => (v === 0 ? 'off' : pct(v * 2)), '#space', 'Room::A subtle sense of space around the click. Off by default; keep it low at fast tempos.'),
+      sliderRow('Room', 'room', 0, 0.5, (v) => (v === 0 ? I.tr('off') : pct(v * 2)), '#space', 'Room::A subtle sense of space around the click. Off by default; keep it low at fast tempos.'),
     ];
 
     /* ================= practice panel ================= */
@@ -660,7 +738,7 @@
     const steppers = [];
     $$('.stepper[data-stepper]').forEach((sp) => {
       const path = sp.dataset.stepper, min = +sp.dataset.min, max = +sp.dataset.max;
-      const inp = el('input', { type: 'number', min, max, inputmode: 'numeric', 'aria-label': path });
+      const inp = el('input', { type: 'number', min, max, inputmode: 'numeric', 'aria-label': (I.source(sp, 'data-help') || path).split('::')[0] });
       const commit = (v) => {
         const n = Math.round(Number(v));
         if (!Number.isFinite(n)) { inp.value = getPath(S(), path); return; }
@@ -705,20 +783,20 @@
     /* ================= sessions ================= */
     $('#sessionName').addEventListener('input', (e) => store.set({ sessionName: e.target.value }));
     $('#sessionName').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#savePreset').click(); });
-    $('#savePreset').addEventListener('click', () => { const name = S().sessionName.trim() || `Preset ${store.presets.length + 1}`; store.savePreset(name); renderPresets(); toast(`Saved “${name}”`); });
+    $('#savePreset').addEventListener('click', () => { const name = S().sessionName.trim() || I.tr(`Preset ${store.presets.length + 1}`); store.savePreset(name); renderPresets(); toast(`Saved “${name}”`); });
     function renderPresets() {
       const list = $('#presetList'); list.innerHTML = '';
       if (!store.presets.length) { list.append(el('div', { class: 'empty', text: 'No presets yet. Set things up and save.' })); return; }
       for (const p of store.presets) {
         const d = p.data;
-        const extras = [d.subdivision > 1 ? T.subName(d.subdivision) : null, d.trainer && d.trainer.enabled ? 'trainer' : null, d.silent && d.silent.enabled ? 'silent bars' : null, d.poly && d.poly.enabled ? 'polyrhythm' : null, d.progressive && d.progressive.enabled ? 'progressive' : null].filter(Boolean).join(', ').toLowerCase();
-        list.append(el('div', { class: 'item' }, el('div', {}, el('div', { text: p.name }), el('div', { class: 'meta', text: `${d.bpm} BPM · ${d.sig.num}/${d.sig.den}${extras ? ' · ' + extras : ''}` })),
+        const extras = [d.subdivision > 1 ? T.subName(d.subdivision) : null, d.trainer && d.trainer.enabled ? I.tr('trainer') : null, d.silent && d.silent.enabled ? I.tr('silent bars') : null, d.poly && d.poly.enabled ? I.tr('polyrhythm') : null, d.progressive && d.progressive.enabled ? I.tr('progressive') : null].filter(Boolean).join(', ');
+        list.append(el('div', { class: 'item' }, el('div', {}, el('div', { text: p.name, translate: 'no' }), el('div', { class: 'meta', translate: 'no', text: `${d.bpm} BPM · ${d.sig.num}/${d.sig.den}${extras ? ' · ' + extras : ''}` })),
           el('div', { class: 'acts' },
             el('button', { class: 'btn small ghost', text: 'Load', help: 'Load::Apply this preset now.', onclick: () => { if (engine.running) stopAll(); store.loadPreset(p.id); toast(`Loaded “${p.name}”`); } }),
             el('button', { class: 'btn small ghost', text: 'Update', help: 'Update::Overwrite this preset with the current settings.', onclick: () => { store.updatePreset(p.id); renderPresets(); toast('Preset updated'); } }),
             el('button', { class: 'btn small ghost', text: 'Copy', help: 'Copy::Duplicate it to make a variation.', onclick: () => { store.duplicatePreset(p.id); renderPresets(); } }),
-            el('button', { class: 'btn small ghost', text: 'Rename', onclick: () => { const n = prompt('Preset name', p.name); if (n && n.trim()) { store.renamePreset(p.id, n.trim()); renderPresets(); } } }),
-            el('button', { class: 'btn small ghost danger', text: 'Delete', onclick: () => { if (confirm(`Delete “${p.name}”?`)) { store.deletePreset(p.id); renderPresets(); } } }))));
+            el('button', { class: 'btn small ghost', text: 'Rename', onclick: () => { const n = prompt(I.tr('Preset name'), p.name); if (n && n.trim()) { store.renamePreset(p.id, n.trim()); renderPresets(); } } }),
+            el('button', { class: 'btn small ghost danger', text: 'Delete', onclick: () => { if (confirm(I.t('Delete “{=name}”?', { name: p.name }))) { store.deletePreset(p.id); renderPresets(); } } }))));
       }
     }
     function renderHistory() {
@@ -736,12 +814,12 @@
       stat(fmt(st.today), 'today', 'Today::Time logged today.');
       for (const h of store.history.slice(0, 40)) {
         const dt = new Date(h.date);
-        const when = dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' + dt.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        const when = dt.toLocaleDateString(I.lang, { month: 'short', day: 'numeric' }) + ' ' + dt.toLocaleTimeString(I.lang, { hour: '2-digit', minute: '2-digit' });
         const tempo = h.startBpm === h.endBpm ? `${h.endBpm} BPM` : `${h.startBpm} → ${h.endBpm} BPM`;
-        list.append(el('div', { class: 'item' }, el('div', {}, el('div', { text: `${h.name ? h.name + ' · ' : ''}${fmt(h.duration)} · ${tempo} · ${h.sig}` }), el('div', { class: 'meta', text: `${when} · ${h.config}` }))));
+        list.append(el('div', { class: 'item' }, el('div', { translate: 'no' }, el('div', { text: `${h.name ? h.name + ' · ' : ''}${fmt(h.duration)} · ${tempo} · ${h.sig}` }), el('div', { class: 'meta', text: `${when} · ${configText(h.config)}` }))));
       }
     }
-    $('#clearHistory').addEventListener('click', () => { if (confirm('Clear the whole practice log?')) { store.clearHistory(); todayCache = null; renderHistory(); updateClocks(); } });
+    $('#clearHistory').addEventListener('click', () => { if (confirm(I.tr('Clear the whole practice log?'))) { store.clearHistory(); todayCache = null; renderHistory(); updateClocks(); } });
 
     /* ================= tools ================= */
     let refOn = false, genOn = false, genFreq = 440;
@@ -780,7 +858,7 @@
     const SHORTCUTS = [['Space', 'Play / pause'], ['↑ / ↓', 'Tempo ±1 (Shift ±5, Alt ±10)'], ['T', 'Tap tempo'], ['R', 'Stop and reset'], ['M', 'Mute / unmute'], ['H', 'Help hints on / off'], ['Esc', 'Close dialogs, leave a field']];
     $('#shortcuts2').append(el('h4', { class: 'sc-head', text: 'Metronome' }));
     for (const id of ['#shortcuts', '#shortcuts2']) for (const [k, d] of SHORTCUTS) if (!(id === '#shortcuts2' && k === 'H')) $(id).append(el('kbd', { text: k }), el('span', { text: d }));
-    $('#resetAll').addEventListener('click', () => { if (confirm('Reset every setting to its default? Presets, saved patterns and the log are kept.')) { stopAll(); store.reset(); toast('Settings reset'); } });
+    $('#resetAll').addEventListener('click', () => { if (confirm(I.tr('Reset every setting to its default? Presets, saved patterns and the log are kept.'))) { stopAll(); store.reset(); toast('Settings reset'); } });
 
     /* ================= keyboard ================= */
     document.addEventListener('keydown', (e) => {
@@ -808,9 +886,10 @@
     function render(s, patch) {
       const keys = patch ? Object.keys(patch) : null;
       const has = (...k) => !keys || k.some((x) => keys.includes(x));
-      if (has('theme', 'palette', 'terms')) { MN.themes.apply(s.theme, s.palette); T.set(s.terms); renderPrefs(s); }
-      if (has('terms', 'sig')) applyTerms(s);
-      if (has('terms')) { renderRoles(s); renderPresets(); }
+      if (has('theme', 'palette')) { MN.themes.apply(s.theme, s.palette); renderPrefs(s); }
+      if (has('textScale', 'stand', 'standScale', 'cvd', 'leftHanded', 'palette', 'floating')) { MN.themes.applyA11y(s); renderAccess(s); }
+      if (has('lang', 'notation')) { if (keys) renderPrefs(s); I.set(s.lang, s.notation); }   // re-renders through onLanguage below
+      if (has('sig')) applyTerms(s);
       if (has('help')) { $('#helpToggle').classList.toggle('on', s.help); $('#helpToggle').setAttribute('aria-pressed', String(s.help)); }
       if (has('mode')) { document.body.classList.toggle('simple', s.mode === 'simple'); $$('#modeSeg button').forEach((b) => b.classList.toggle('on', b.dataset.mode === s.mode)); }
       if (has('panel')) { $$('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.panel === s.panel)); $$('.panel').forEach((p) => p.classList.toggle('on', p.dataset.panel === s.panel)); }
@@ -832,7 +911,8 @@
       if (has('soundBeat', 'soundAccent', 'soundSub', 'soundPoly', 'subdivision', 'poly', 'accents', 'sig')) { quickSound.value = s.soundBeat; renderRoles(s); }
       if (has('countInBars')) $$('#countInSeg button').forEach((b) => b.classList.toggle('on', +b.dataset.v === s.countInBars));
       if (has('masterVolume', 'accentVolume', 'subVolume', 'polyVolume', 'panBeat', 'panSub', 'panPoly', 'room')) {
-        $('#masterVol').value = s.masterVolume; $('#masterVol').style.setProperty('--fill', s.masterVolume * 100 + '%');
+        $('#masterVol').value = s.masterVolume; $('#masterVol').style.setProperty('--fill', (s.masterVolume / 2) * 100 + '%');
+        $('#masterVol').setAttribute('aria-valuetext', pct(s.masterVolume));
         $('#subVol').value = s.subVolume; $('#subVol').style.setProperty('--fill', s.subVolume * 100 + '%'); $('#subVolV').textContent = pct(s.subVolume);
         levelRenders.forEach((f) => f(s));
       }
@@ -867,6 +947,15 @@
       buildRing(s);
     }
     store.subscribe((s, patch) => { render(s, patch); engine.applySettings(s); });
+    /* After a language or notation change: everything that names note values or is built
+       from several translated pieces is drawn again (plain text is re-translated by i18n). */
+    I.onChange(() => { const s = S(); applyTerms(s); renderPrefs(s); renderRoles(s); renderSubPattern(s); renderPresets(); renderHistory(); renderPatterns(); renderStatus(); levelRenders.forEach((f) => f(s)); });
+    /* the floating metronome (js/mini.js) drives the same controls as the page */
+    if (MN.mini) MN.mini.init({
+      store, engine, toast, pump, setBpm, start, pause, stop: stopAll,
+      onVisual: (fn) => { visualListeners.add(fn); return () => visualListeners.delete(fn); },
+      onReset: (fn) => { resetHooks.push(fn); },
+    });
     render(S(), null);
     renderPresets(); renderHistory(); renderPatterns(); updateClocks(); syncTransport();
   }

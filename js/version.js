@@ -3,7 +3,7 @@
   const MN = (root.MN = root.MN || {});
   MN.APP = Object.freeze({
     name: 'Metronome & Tuner',
-    version: '2.1.0',
+    version: '2.3.0',
     released: 'November 2026',
     handle: 'sayrolivares',
     links: Object.freeze({

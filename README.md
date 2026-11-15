@@ -34,7 +34,8 @@ Open the app and the tuner is ready: press start, allow the microphone, play a s
 - Guitar: standard, Drop D, half step down, D standard (whole step down), Drop C, Open D, Open G, Open E, Open C, DADGAD, 7-string
 - Bass: 4, 5 and 6-string standard, Drop D, half step down, 5-string Drop A
 - Violin, viola, cello, double bass (orchestral, solo, 5-string), ukulele (high G, low G, D tuning, baritone), mandolin and 5-string banjo
-- Your own tunings for any instrument with up to 12 strings, saved in your browser
+- Your own tunings for any instrument with up to 12 strings, saved in your browser: **Create a custom tuning** at the top of each instrument starts from its tuning, and − and + move each string a semitone
+- A left-handed layout: strings from high to low and the settings on the left
 
 ### Advanced mode
 - Reference pitch: A4 from 400 to 480 Hz in 0.1 Hz steps, with 415, 432, 440, 442 and 443 one tap away
@@ -66,6 +67,7 @@ Open the app and the tuner is ready: press start, allow the microphone, play a s
 - **Progressive practice:** a list of tempos, each held for a set time, with automatic changes between them
 - **Polyrhythms:** 2:3, 3:2, 3:4, 4:3, 4:5 or any custom ratio
 - **Practice timer** with a gentle chime when time is up
+- **Floating metronome:** a small widget with the beats, time signature, tempo ± and play/stop. It pops out over your other tabs and apps (picture-in-picture) and docks in a corner of the page when you scroll away
 
 ### Sessions
 - Save complete setups as presets, then load, copy, rename or update them
@@ -73,9 +75,11 @@ Open the app and the tuner is ready: press start, allow the microphone, play a s
 - Simple statistics: total time, days practiced this week, streak, average session
 
 ## Everywhere
-- Seven color palettes, each in light and dark, plus an automatic mode that follows your device. The default, Luthier, is walnut, brass and ice blue.
+- Eight color palettes, each in light and dark, plus an automatic mode that follows your device. The default, Luthier, is walnut, brass and ice blue; High contrast is black and white with bold borders.
+- Accessibility: text size from 80 % to 160 %, a Stand mode with big readouts you can see from a music stand, and colorblind-safe tuner colors (blue for in tune, orange for out of tune)
 - Simple and Advanced modes, help hints on every control, and full keyboard shortcuts
-- American (quarter note) or British (crotchet) note names in the metronome
+- In English, Spanish, German, Italian, French and Dutch, chosen from your browser on first visit and changeable in Settings
+- Music notation follows the language (C D E… in English, Do Re Mi… in Spanish, Italian and French, H and B♭ = B in German, Bes in Dutch; quarter note, crotchet, negra, Viertelnote…), or pick another notation without changing the language. When they differ, the language's name appears in parentheses: Spanish with German notation shows "H (Si)" and "negra (Viertelnote)"
 - Installable to your phone or tablet home screen
 
 ## Keyboard shortcuts
@@ -98,15 +102,19 @@ The app collects nothing. The tuner listens only while you have pressed start; y
 
 The app is plain HTML, CSS and JavaScript with no framework, no build step and no dependencies.
 
+Translations are tables keyed by the English text (`js/locale-*.js`); `js/i18n.js` translates the page as it renders, so the markup and code stay in English, and each language file loads only when it's chosen. Note names in any text (E2, F♯3, B♭1) are rewritten into the chosen notation. Octaves use scientific numbering in every language (middle C is C4, Do4, C4 in German), as most tuners do. To add or correct a language, see [docs/LANGUAGES.md](docs/LANGUAGES.md).
+
 The tuner reads pitch with the McLeod Pitch Method, a time-domain method that measures how the waveform repeats rather than looking for the loudest frequency, so it isn't fooled by strong harmonics. Before that, the room's noise floor is removed from the spectrum; after it, the harmonics are checked so that a low string heard through a phone microphone (which cuts its fundamental) isn't read an octave up. Each reading gets a confidence score from how cleanly it repeats, how far it stands above the room, how harmonic it is and whether consecutive readings agree, and a stabiliser handles each pluck's attack, settling, smoothing and decay. Measured on 162 recordings of real instruments through simulated phone microphones, it reads the right note in 99.5 % or more of the frames (95 % in a noisy room) and a wrong note in 0.3 % or fewer. See [docs/TUNER.md](docs/TUNER.md) for the design, the maths, the measurements and the tests, and [docs/TUNER-TESTING.md](docs/TUNER-TESTING.md) for testing it by hand on your own instrument and phone.
 
 Metronome timing uses the Web Audio API clock with a short look-ahead scheduler, driven by a Web Worker so it stays steady even when the window is in the background. Tempo changes take effect within about a tenth of a second, without skipped or doubled clicks. The visuals follow the audio clock rather than running their own timer.
+
+The floating metronome (`js/mini.js`) uses the browser's Document Picture-in-Picture window where it exists, and a canvas drawn into a video picture-in-picture window elsewhere; its animation frames keep the beat display moving while the app's own tab is in the background. Text size, Stand mode, the colorblind-safe colors and the left-handed layout are attributes on the page root, applied before the first paint, so the page never flashes at the default first; every font size in the stylesheet is multiplied by one text-size variable.
 
 ## Development
 
 ```
 npx serve .              # run locally from this folder (the one with index.html); the microphone works on localhost
-npm test                 # unit, scenario and engine tests, plain node
+npm test                 # unit, scenario, engine and translation tests, plain node
 npm run test:recordings  # the tuner on 165 real recordings (downloads them; needs npm and ffmpeg)
 npm run test:browser     # end-to-end in Chrome with a fake microphone (needs Playwright)
 ```

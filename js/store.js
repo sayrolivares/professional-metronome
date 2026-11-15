@@ -10,7 +10,7 @@
     accents: [3, 1, 2, 1],
     subdivision: 1, subPattern: [1], feel: 'straight',
     soundAccent: 'warm-wood', soundBeat: 'soft-wood', soundSub: 'soft-click', soundPoly: 'marimba',
-    masterVolume: 0.8, accentVolume: 1.0, subVolume: 0.6, polyVolume: 0.7, room: 0, muted: false,
+    masterVolume: 1.0, accentVolume: 1.0, subVolume: 0.6, polyVolume: 0.7, room: 0, muted: false,
     panBeat: 0, panSub: 0, panPoly: 0,
     countInBars: 0,
     silent: { enabled: false, play: 2, silence: 2 },
@@ -19,9 +19,13 @@
     poly: { enabled: false, against: 3 },
     timer: { enabled: false, minutes: 5, seconds: 0, notify: true },
     visual: 'full', pendulum: false,
-    theme: 'dark', palette: 'luthier', terms: 'both', mode: 'simple', panel: 'rhythm', help: true,
+    theme: 'dark', palette: 'luthier', lang: 'en', notation: 'auto', mode: 'simple', panel: 'rhythm', help: true,
     refFreq: 440,
     sessionName: '',
+    /* accessibility and layout (Settings) */
+    textScale: 1, stand: false, standScale: 1.4, cvd: false, leftHanded: false,
+    prevPalette: 'luthier',   // the palette to go back to when High contrast is switched off
+    floating: false,   // the mini metronome: docked in the page, and popped out where the browser allows
   };
 
   function load(key, fallback) {
@@ -54,7 +58,11 @@
     }
     if (!['light', 'dark', 'auto'].includes(out.theme)) out.theme = 'dark';
     if (MN.themes && !MN.themes.PALETTES.some((p) => p.id === out.palette)) out.palette = MN.themes.DEFAULT;
-    if (!['us', 'uk', 'both'].includes(out.terms)) out.terms = 'both';
+    if (MN.themes && (out.prevPalette === 'contrast' || !MN.themes.PALETTES.some((p) => p.id === out.prevPalette))) out.prevPalette = MN.themes.DEFAULT;
+    if (MN.notation && !MN.notation.LANG_IDS.includes(out.lang)) out.lang = 'en';
+    if (MN.notation && !(out.notation === 'auto' || MN.notation.SYSTEMS[out.notation])) out.notation = 'auto';
+    out.masterVolume = R.clamp(out.masterVolume, 0, 2);     // 0–200 %
+    if (MN.themes) { out.textScale = MN.themes.clampTo(out.textScale, MN.themes.A11Y.textScale); out.standScale = MN.themes.clampTo(out.standScale, MN.themes.A11Y.standScale); }
     out.bpm = R.clamp(Math.round(out.bpm), 20, out.maxBpm);
     if (![1, 2, 3, 4, 6, 8].includes(out.subdivision)) out.subdivision = 1;
     if (out.accents.length !== R.beatsPerBar(out.sig)) out.accents = R.defaultAccents(out.sig);
@@ -65,7 +73,7 @@
     constructor() {
       const saved = load(KEY + '.settings', {});
       this.state = sanitize(saved);
-      if (!saved || !saved.terms) this.state.terms = MN.terms ? MN.terms.detect() : 'both';   // first run: from the browser language
+      if (MN.notation && (!saved || !saved.lang)) Object.assign(this.state, MN.notation.resolvePrefs(saved));   // first run or older settings: browser language
       this.state.muted = false; // never start muted
       this.presets = load(KEY + '.presets', []);
       this.history = load(KEY + '.history', []);
@@ -149,7 +157,14 @@
       while (days.has(d.toDateString())) { streak++; d.setDate(d.getDate() - 1); }
       return { sessions: h.length, total, today, avg: total / h.length, longest: Math.max(...h.map((s) => s.duration)), weekDays, avgBpm, streak };
     }
-    reset() { this.set(Object.assign(sanitize({}), { theme: this.state.theme, palette: this.state.palette, terms: this.state.terms, mode: this.state.mode, help: this.state.help }), 'reset'); }
+    /* "Reset all settings" is the metronome's reset: the look of the app, its language and
+       the accessibility choices are kept (they live in Settings, not in the metronome). */
+    reset() {
+      const keep = ['theme', 'palette', 'lang', 'notation', 'mode', 'help', 'textScale', 'stand', 'standScale', 'cvd', 'leftHanded', 'floating', 'prevPalette'];
+      const patch = sanitize({});
+      for (const k of keep) patch[k] = this.state[k];
+      this.set(patch, 'reset');
+    }
   }
 
   MN.Store = Store;

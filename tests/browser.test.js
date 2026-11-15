@@ -274,6 +274,175 @@ t('switching tools stops the one you leave, and it stays stopped when you come b
   assert.ok(!(await page.evaluate(() => metronome.engine.running)));
   await done();
 });
+t('language and notation: Spanish with German note names, then back to English', async () => {
+  const { page, done } = await open({ viewport: { width: 1280, height: 860 }, mobile: false, init: () => localStorage.setItem('metronome.v1.settings', JSON.stringify({ lang: 'en', help: false })) });
+  assert.equal(await page.getAttribute('#micBtn', 'aria-label'), 'Start listening');
+  await page.evaluate(() => MN.dialogs.open('prefs'));
+  await page.selectOption('#langSelect', 'es');
+  await page.waitForFunction(() => document.querySelector('#micBtn').getAttribute('aria-label') === 'Empezar a escuchar', null, { timeout: 5000 });
+  assert.equal(await page.getAttribute('html', 'lang'), 'es');
+  let strings = await page.$$eval('#strings .sl', (els) => els.map((e) => e.textContent));
+  assert.deepEqual(strings, ['Mi2', 'La2', 'Re3', 'Sol3', 'Si3', 'Mi4'], 'solfège in Spanish');
+  await page.click('#notationList [data-v="de"]');
+  strings = await page.$$eval('#strings .sl', (els) => els.map((e) => e.textContent));
+  assert.deepEqual(strings, ['E2', 'A2', 'D3', 'G3', 'H3', 'E4'], 'German letters, H for B');
+  assert.match(await page.textContent('#termsExample'), /H \(Si\).*negra \(Viertelnote\)/);
+  await page.waitForFunction(() => { const v = JSON.parse(localStorage.getItem('metronome.v1.settings') || '{}'); return v.lang === 'es' && v.notation === 'de'; }, null, { timeout: 3000 });
+  await page.selectOption('#langSelect', 'en');
+  await page.click('#notationList [data-v="auto"]');
+  await page.waitForFunction(() => document.querySelector('#micBtn').getAttribute('aria-label') === 'Start listening', null, { timeout: 5000 });
+  strings = await page.$$eval('#strings .sl', (els) => els.map((e) => e.textContent));
+  assert.deepEqual(strings, ['E2', 'A2', 'D3', 'G3', 'B3', 'E4']);
+  await done();
+});
+
+t('settings: gear button, text size, Stand mode, high contrast and colorblind-safe colors, saved and restored', async () => {
+  const { page, done } = await open({ viewport: { width: 1280, height: 860 }, mobile: false, init: () => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem('metronome.v1.settings', JSON.stringify({ lang: 'en', help: false, palette: 'nocturne' })); } } });
+  assert.equal(await page.getAttribute('#prefsBtn', 'aria-label'), 'Settings');
+  await page.click('#prefsBtn');
+  await page.waitForSelector('#prefs-dlg.on');
+  assert.equal(await page.textContent('#prefs-title'), 'Settings');
+  /* text size: + twice = 120 %, − at the bottom of the range is disabled */
+  await page.click('#fsPlus'); await page.click('#fsPlus');
+  assert.equal(await page.textContent('#fsVal'), '120%');
+  const fs = await page.evaluate(() => [getComputedStyle(document.documentElement).getPropertyValue('--fs-user').trim(), parseFloat(getComputedStyle(document.body).fontSize)]);
+  assert.deepEqual(fs, ['1.2', 18], 'body text follows the text size');
+  for (let i = 0; i < 4; i++) await page.click('#fsMinus');
+  assert.equal(await page.textContent('#fsVal'), '80%');
+  assert.ok(await page.$eval('#fsMinus', (b) => b.disabled), 'cannot go below 80%');
+  await page.click('#fsPlus'); await page.click('#fsPlus');
+  /* Stand mode: the size row only works while it is on */
+  assert.ok(await page.$eval('#standSizeRow', (r) => r.classList.contains('off')));
+  await page.click('#standSw');
+  assert.ok(await page.evaluate(() => document.documentElement.hasAttribute('data-stand')));
+  await page.click('#standPlus');
+  assert.equal(await page.textContent('#standVal'), '150%');
+  /* High contrast switches the palette and switching it off restores the previous one */
+  await page.click('#contrastSw');
+  assert.equal(await page.getAttribute('html', 'data-palette'), 'contrast');
+  await page.click('#contrastSw');
+  assert.equal(await page.getAttribute('html', 'data-palette'), 'nocturne');
+  /* colorblind-safe: the tuner's in-tune colour becomes the safe blue */
+  await page.click('#cvdSw');
+  const ok = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--tune-ok').trim());
+  assert.ok(['#56b4e9', '#0072b2'].includes(ok), 'safe in-tune colour: ' + ok);
+  await page.waitForFunction(() => { const v = JSON.parse(localStorage.getItem('metronome.v1.settings') || '{}'); return v.textScale === 1 && v.stand === true && v.standScale === 1.5 && v.cvd === true; }, null, { timeout: 3000 });
+  /* after a reload it is all there before the first paint */
+  await page.reload({ waitUntil: 'networkidle' });
+  const after = await page.evaluate(() => ({ stand: document.documentElement.hasAttribute('data-stand'), cvd: document.documentElement.hasAttribute('data-cvd'), standScale: getComputedStyle(document.documentElement).getPropertyValue('--stand').trim() }));
+  assert.deepEqual(after, { stand: true, cvd: true, standScale: '1.5' });
+  /* "Reset all settings" in the metronome keeps the accessibility choices */
+  await page.evaluate(() => metronome.store.reset());
+  assert.equal(await page.evaluate(() => metronome.store.get().stand), true);
+  await page.screenshot({ path: path.join(SHOTS, 'stand-mode.png') });
+  await done();
+});
+
+t('left-handed tuner: strings from high to low, settings on the left, arrow keys follow the picture', async () => {
+  const { page, done } = await open({ viewport: { width: 1280, height: 860 }, mobile: false, init: () => localStorage.setItem('metronome.v1.settings', JSON.stringify({ lang: 'en', help: false })) });
+  await page.click('#leftySw');
+  assert.ok(await page.evaluate(() => document.documentElement.hasAttribute('data-lefty')));
+  const xs = await page.$$eval('#strings .string', (els) => els.map((e) => e.getBoundingClientRect().left));
+  assert.ok(xs[0] > xs[xs.length - 1], 'the lowest string is drawn on the right');
+  const side = await page.$eval('.tuner-side', (e) => e.getBoundingClientRect().left), face = await page.$eval('.tuner-face', (e) => e.getBoundingClientRect().left);
+  assert.ok(side < face, 'settings card on the left');
+  assert.equal(await page.$eval('#leftySw2', (b) => b.classList.contains('on')), true, 'the switch in Settings follows');
+  await page.click('#strings .string >> nth=2');            // D3, manual
+  await page.keyboard.press('ArrowRight');                   // to the right in the picture = a lower string
+  assert.equal(await page.evaluate(() => tuner.store.get().stringIndex), 1);
+  await page.click('#leftySw');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.evaluate(() => tuner.store.get().stringIndex), 2);
+  await done();
+});
+
+t('custom tuning: the create button starts from the instrument, strings move by semitones, the tuning is saved and used', async () => {
+  const { page, done } = await open({ viewport: { width: 1280, height: 860 }, mobile: false, init: () => localStorage.setItem('metronome.v1.settings', JSON.stringify({ lang: 'en', help: false })) });
+  await page.click('#tuningBtn');
+  await page.click('#instPicks >> text=Bass');
+  assert.match(await page.textContent('#tuneCreate'), /Create a custom tuning.*Bass, 4-string standard/);
+  await page.click('#tuneCreate');
+  assert.equal(await page.inputValue('#edNotes'), 'E1 A1 D2 G2');
+  assert.equal(await page.inputValue('#edInst'), 'bass');
+  await page.click('[data-k="0-"]'); await page.click('[data-k="0-"]');   // E1 → D1
+  await page.click('[data-k="3+"]');                                       // G2 → G♯2
+  await page.click('#edAdd');                                              // + a fourth above: C♯3
+  assert.equal(await page.inputValue('#edNotes'), 'D1 A1 D2 G♯2 C♯3');
+  await page.click('#edRemove');
+  await page.fill('#edName', 'Low D bass');
+  await page.click('#edSave');
+  await page.waitForFunction(() => document.querySelector('#tuningName').textContent === 'Low D bass');
+  const strings = await page.$$eval('#strings .sl', (els) => els.map((e) => e.textContent));
+  assert.deepEqual(strings, ['D1', 'A1', 'D2', 'G♯2']);
+  assert.ok(await page.isVisible('#tuneCreate'), 'after saving, the dialog shows My tunings with the create button on top');
+  await page.keyboard.press('Escape');
+  /* in German notation the editor speaks German: H and Fis */
+  await page.evaluate(() => metronome.store.set({ notation: 'de' }));
+  await page.click('#tuningBtn');
+  await page.click('#instPicks >> text=Guitar');
+  await page.click('#tuneCreate');
+  assert.equal(await page.inputValue('#edNotes'), 'E2 A2 D3 G3 H3 E4');
+  await page.click('[data-k="3+"]');
+  assert.equal(await page.inputValue('#edNotes'), 'E2 A2 D3 Gis3 H3 E4');
+  await page.evaluate(() => metronome.store.set({ notation: 'auto' }));
+  await done();
+});
+
+t('floating metronome: docked in the page when the big one is out of view, and popped out over other tabs', async () => {
+  const { page, browser, done } = await open({ viewport: { width: 1280, height: 860 }, mobile: false, hash: '#metronome', init: () => { localStorage.setItem('metronome.v1.settings', JSON.stringify({ lang: 'en', help: false, mode: 'advanced', sig: { num: 3, den: 4, compound: true }, accents: [3, 1, 1] })); localStorage.setItem('metronome.v1.audioOk', '1'); } });
+  const ctx = page.context();
+  const popped = ctx.waitForEvent('page', { timeout: 5000 }).catch(() => null);
+  await page.click('#floatSw');
+  const pip = await popped;
+  const pipProblems = [];
+  assert.ok(pip, 'a picture-in-picture window opened');
+  pip.on('console', (m) => { if (m.type() === 'error') pipProblems.push(m.text()); });
+  assert.equal(await pip.textContent('.mini-sig'), '3/4');
+  assert.equal(await pip.$$eval('.mini-dot', (d) => d.length), 3);
+  await pip.click('.mini-play');
+  await page.waitForFunction(() => metronome.engine.running);
+  await pip.waitForFunction(() => document.querySelector('.mini-dot.on'), null, { timeout: 3000 });
+  await pip.click('.mini-round >> nth=1');
+  assert.equal(await page.evaluate(() => metronome.store.get().bpm), 101);
+  await pip.click('.mini-stop');
+  assert.equal(await page.evaluate(() => metronome.engine.running), false);
+  await pip.close();
+  await page.waitForFunction(() => !MN.mini.api.isOpen);
+  /* in the page: the dock shows only while the big metronome is out of view */
+  assert.ok(await page.$eval('.mini-dock', (d) => d.hidden), 'hidden while the big metronome is in view');
+  await page.evaluate(() => document.querySelector('#tabs').scrollIntoView());
+  await page.waitForFunction(() => !document.querySelector('.mini-dock').hidden, null, { timeout: 3000 });
+  await page.click('.mini-dock .mini-play');
+  await page.waitForFunction(() => metronome.engine.running);
+  await page.waitForFunction(() => document.querySelector('.mini-dock .mini-dot.on'), null, { timeout: 3000 });
+  await page.screenshot({ path: path.join(SHOTS, 'floating-dock.png') });
+  await page.click('.mini-dock .mini-stop');
+  /* × turns the setting off */
+  await page.click('.mini-dock [data-label="Turn off the floating metronome"]');
+  assert.equal(await page.evaluate(() => metronome.store.get().floating), false);
+  assert.ok(await page.$eval('.mini-dock', (d) => d.hidden));
+  assert.deepEqual(pipProblems, []);
+  await done();
+});
+
+t('accessibility extremes: 160% text and Stand mode at 200% fit from 320 px to desktop', async () => {
+  for (const [name, w, h, mobile] of [['phone-320', 320, 640, true], ['phone-390', 390, 844, true], ['tablet-768', 768, 1024, true], ['desktop-1440', 1440, 900, false]]) {
+    const { page, done } = await open({ viewport: { width: w, height: h }, mobile, init: () => localStorage.setItem('metronome.v1.settings', JSON.stringify({ lang: 'en', help: false, textScale: 1.6, stand: true, standScale: 2, leftHanded: true, mode: 'advanced' })) });
+    for (const view of ['tuner', 'metronome']) {
+      await page.evaluate((v) => MN.views.show(v), view);
+      await page.waitForTimeout(150);
+      const o = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, w: innerWidth }));
+      assert.ok(o.sw <= o.w, `${name} ${view}: page is ${o.sw}px wide in a ${o.w}px window`);
+    }
+    await page.evaluate(() => MN.dialogs.open('prefs'));
+    await page.waitForTimeout(250);
+    const d = await page.$eval('#prefs-dlg .dlg-box', (b) => ({ sw: b.scrollWidth, cw: b.clientWidth }));
+    assert.ok(d.sw <= d.cw + 1, `${name}: Settings dialog overflows (${d.sw} > ${d.cw})`);
+    if (name === 'phone-390') await page.screenshot({ path: path.join(SHOTS, 'settings-160.png') });
+    await done();
+  }
+});
+
 t('layouts from 320 px phones to desktop: no horizontal overflow, controls reachable', async () => {
   for (const [name, w, h, mobile] of [['phone-320', 320, 640, true], ['phone-390', 390, 844, true], ['phone-landscape', 844, 390, true], ['tablet-768', 768, 1024, true], ['tablet-1024', 1024, 768, true], ['desktop-1440', 1440, 900, false]]) {
     for (const mode of ['simple', 'advanced']) {

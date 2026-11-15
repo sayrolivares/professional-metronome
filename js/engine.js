@@ -62,9 +62,20 @@
 
       this.master = ctx.createGain();
       this.mute = ctx.createGain();
+      /* Output stage, sized for master volumes up to 200 %. The synthesized clicks peak
+         around −9 dBFS at 80 %, so doubling the gain is safe for one layer but not when
+         accent, subdivisions and polyrhythm coincide. A fixed +1 dB trim keeps the old
+         loudness at the same setting (Chrome's old compressor added about that much), a
+         fast compressor acting as a limiter catches peaks from −3 dBFS, and a soft clipper
+         after it, transparent below −1 dBFS, guarantees the output never reaches full
+         scale (Chrome's compressor alone overshoots by about 0.5 dB). */
+      this.trim = ctx.createGain(); this.trim.gain.value = 1.12;
       this.limiter = ctx.createDynamicsCompressor();
-      this.limiter.threshold.value = -8; this.limiter.knee.value = 10;
-      this.limiter.ratio.value = 6; this.limiter.attack.value = 0.002; this.limiter.release.value = 0.12;
+      this.limiter.threshold.value = -3; this.limiter.knee.value = 0;
+      this.limiter.ratio.value = 20; this.limiter.attack.value = 0.001; this.limiter.release.value = 0.1;
+      this.safety = ctx.createWaveShaper();
+      this.safety.curve = Engine.softClipCurve();
+      this.safety.oversample = '4x';
       this.bus = ctx.createGain();
       this.wet = ctx.createGain(); this.wet.gain.value = 0;
       this.convolver = ctx.createConvolver();
@@ -72,7 +83,7 @@
       this.roomOn = false;                         // convolver only connected when room > 0
       this.bus.connect(this.master);
       this.convolver.connect(this.wet).connect(this.master);
-      this.master.connect(this.mute).connect(this.limiter).connect(ctx.destination);
+      this.master.connect(this.mute).connect(this.trim).connect(this.limiter).connect(this.safety).connect(ctx.destination);
 
       this.pans = {};
       for (const role of ['accent', 'beat', 'sub', 'poly', 'count']) {
@@ -110,7 +121,7 @@
       const t = this.ctx.currentTime;
       const set = (param, v, tc) => { if (immediate) param.value = v; else param.setTargetAtTime(v, t, tc); };
       try {
-        set(this.master.gain, R.clamp(fin(s.masterVolume, 0.8), 0, 1), 0.02);
+        set(this.master.gain, R.clamp(fin(s.masterVolume, 1), 0, Engine.MAX_VOLUME), 0.02);
         set(this.mute.gain, s.muted ? 0 : 1, 0.015);
         const room = R.clamp(fin(s.room, 0), 0, 0.5);
         set(this.wet.gain, room, 0.05);
@@ -435,5 +446,16 @@
     }
   }
 
+  /* Master volume runs from 0 to 200 % (2.0). */
+  Engine.MAX_VOLUME = 2;
+  /* Linear up to −1 dBFS, then a tanh shoulder that approaches (never reaches) 0.995. */
+  Engine.softClipCurve = (n = 4097, knee = 0.891, ceil = 0.995) => {
+    const k = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * 2 - 1, a = Math.abs(x);
+      k[i] = Math.sign(x) * (a <= knee ? a : knee + (ceil - knee) * Math.tanh((a - knee) / (ceil - knee)));
+    }
+    return k;
+  };
   MN.Engine = Engine;
 })(typeof window !== 'undefined' ? window : globalThis);

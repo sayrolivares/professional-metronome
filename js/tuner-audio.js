@@ -187,7 +187,9 @@
       this.freq = 440; this.wave = 'sine'; this.volume = 0.35;
     }
     get playing() { return !!this.osc; }
-    level(v) { return Math.pow(Math.max(0, Math.min(1, v)), 2) * 0.5; }   // perceptual curve, capped well below clipping
+    /* Perceptual curve. Up to 100 % it is unchanged (squared, peak 0.5 = −6 dBFS); from 100 %
+       to 200 % it rises another 5.8 dB, reaching 0.98 at 200 %, just under full scale. */
+    level(v) { const x = Math.max(0, Math.min(2, v)); return x <= 1 ? x * x * 0.5 : 0.5 * Math.pow(1.96, x - 1); }
 
     async play(freq, wave, volume) {
       if (!this.AC) throw new TunerError('unsupported', 'This browser doesn’t support Web Audio.');

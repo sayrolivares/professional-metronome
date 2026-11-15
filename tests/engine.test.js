@@ -14,6 +14,7 @@ class Ctx {
   createBufferSource() { return src(); }
   createBiquadFilter() { return Object.assign(new Node(), { frequency: new Param(), Q: new Param(), type: '' }); }
   createDynamicsCompressor() { return Object.assign(new Node(), { threshold: new Param(), knee: new Param(), ratio: new Param(), attack: new Param(), release: new Param() }); }
+  createWaveShaper() { return Object.assign(new Node(), { curve: null, oversample: 'none' }); }
   createConvolver() { return Object.assign(new Node(), { buffer: null }); }
   createStereoPanner() { return Object.assign(new Node(), { pan: new Param() }); }
   createBuffer(ch, len) { return { sampleRate: this.sampleRate, getChannelData: () => new Float32Array(len) }; }
@@ -167,6 +168,18 @@ t('a scheduler error never stops the clock', async () => {
   e.fire = (...a) => { if (!thrown) { thrown = true; throw new Error('boom'); } return orig(...a); };
   run(2); e.stop();
   assert.ok(thrown && log.length >= 3);
+});
+
+t('volume goes up to 200% and the output never clips', async () => {
+  const store = new Store();
+  const vol = (v) => { store.presets = [{ id: 'v', name: 'v', data: { masterVolume: v } }]; store.loadPreset('v'); return store.get().masterVolume; };
+  assert.equal(vol(5), 2); assert.equal(vol(-1), 0); assert.equal(vol(1.6), 1.6);
+  assert.equal(Engine.MAX_VOLUME, 2);
+  const c = Engine.softClipCurve(), mid = (c.length - 1) / 2;
+  assert.ok(Math.abs(c[mid]) < 1e-6, 'silence stays silent');
+  assert.ok(Math.abs(c[Math.round(mid + mid * 0.5)] - 0.5) < 1e-3, 'linear below the knee');
+  for (let i = 1; i < c.length; i++) assert.ok(c[i] >= c[i - 1], 'monotonic');
+  assert.ok(c[c.length - 1] <= 0.995 && c[0] >= -0.995, 'ceiling below full scale');
 });
 
 (async () => {

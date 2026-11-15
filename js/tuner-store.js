@@ -50,7 +50,7 @@
       detailed: typeof s.detailed === 'boolean' ? s.detailed : d.detailed,
       deviceId: typeof s.deviceId === 'string' && s.deviceId.length < 300 ? s.deviceId : d.deviceId,
       toneWave: oneOf(s.toneWave, ['sine', 'triangle'], d.toneWave),
-      toneVolume: num(s.toneVolume, 0, 1, d.toneVolume),
+      toneVolume: num(s.toneVolume, 0, 2, d.toneVolume),   // 0–200 %
       toneHz: Math.round(num(s.toneHz, 20, 5000, d.toneHz) * 1000) / 1000,
     };
   }

@@ -20,6 +20,9 @@
 <link rel="preload" href="fonts/outfit-400.woff2" as="font" type="font/woff2" crossorigin data-standalone-only>
 <link rel="stylesheet" href="css/styles.css">
 <script src="js/themes.js"></script>
+<script src="js/notation.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/locale-en.js"></script>
 </head>
 <body class="simple">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -61,8 +64,8 @@
       <button class="icon-btn" id="feedbackBtn" data-open="feedback" aria-label="Feedback and contact" data-help="Feedback::Report a bug, suggest a feature or get in touch with the developer.">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12.5a7.5 7.5 0 0 1-11.1 6.6L4 20l1-4.3A7.5 7.5 0 1 1 20 12.5z"/><path d="M8.8 12.5h.01M12.3 12.5h.01M15.8 12.5h.01"/></svg>
       </button>
-      <button class="icon-btn" id="prefsBtn" data-open="prefs" aria-label="Preferences" data-help="Preferences::Light, dark or automatic theme, color palettes, and American or British note names.">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 0 0 0 18c1.1 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7H16a5 5 0 0 0 5-5c0-4-4-7.2-9-7.2z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor" stroke="none"/><circle cx="10.5" cy="7.3" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="7.6" r="1.2" fill="currentColor" stroke="none"/></svg>
+      <button class="icon-btn" id="prefsBtn" data-open="prefs" aria-label="Settings" data-help="Settings::Language, music notation, theme and colors, accessibility, the left-handed tuner and the floating metronome.">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
       <button class="icon-btn" id="helpBtn" data-open="shortcuts" aria-label="Keyboard shortcuts" data-help="Keyboard shortcuts::Every key the tuner and the metronome respond to.">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg>
@@ -87,13 +90,14 @@
         <div class="gauge-wrap" id="gaugeWrap" data-state="idle">
           <svg class="gauge" id="gauge" viewBox="0 36 400 214" aria-hidden="true" focusable="false"></svg>
           <div class="readout">
-            <div class="big-note" id="noteName" data-help="Note::The nearest note to what you play, with its octave. Middle C is C4; the A string of a violin is A4."><span class="nl">–</span><span class="na"></span><span class="no"></span></div>
+            <div class="big-note" id="noteName" data-i18n="text-off" data-help="Note::The nearest note to what you play, with its octave. Middle C is C4; the A string of a violin is A4."><span class="nl">–</span><span class="na"></span><span class="no"></span></div>
+            <div class="note-gloss" id="noteGloss" translate="no" aria-hidden="true"></div>
             <div class="hz-line" data-help="Frequency and cents::The frequency you are playing, and how far it is from the target in cents. 100 cents make a semitone."><span class="hz" id="hzNow">–</span><span class="unit">Hz</span><span class="cents" id="centsNow"></span></div>
             <div class="target-line" id="targetLine" data-help="Target::The frequency you are tuning to, and the difference from what you play. It follows the reference pitch (A4) set in Advanced."></div>
           </div>
         </div>
         <p class="tune-status" id="tuneStatus" data-dir=""><span class="ts-ico" aria-hidden="true"></span><span class="ts-text" id="tuneStatusText">Ready when you are</span></p>
-        <p class="sr-only" id="tuneAnnounce" aria-live="polite"></p>
+        <p class="sr-only" id="tuneAnnounce" aria-live="polite" translate="no"></p>
 
         <div class="strings" id="strings" role="group" aria-label="Strings"></div>
 
@@ -114,14 +118,14 @@
           <p class="ta-hint" id="tunerAlertHint"></p>
           <button class="btn small" id="tunerRetry">Try again</button>
         </div>
-        <dl class="measure advanced-only" id="measure" aria-label="Measurements"></dl>
+        <dl class="measure advanced-only" id="measure" aria-label="Measurements" data-pitch="bare"></dl>
       </div>
 
       <aside class="card quick tuner-side" aria-label="Tuner settings">
         <div class="field">
           <label for="micSelect">Microphone</label>
           <p class="mic-status" id="micStatus" data-help="Microphone permission::Whether this site may use the microphone. Your browser asks the first time you press Start; you can change it later in the browser’s site settings.">Asks when you press Start</p>
-          <p class="mic-proc advanced-only" id="micProc" hidden data-help="Sound processing::Phones and browsers can clean up a voice with echo cancellation, noise suppression and automatic gain. A tuner needs the raw sound, so the app asks for all three off and checks what the browser actually did."></p>
+          <p class="mic-proc advanced-only" id="micProc" hidden data-i18n="text-off" data-help="Sound processing::Phones and browsers can clean up a voice with echo cancellation, noise suppression and automatic gain. A tuner needs the raw sound, so the app asks for all three off and checks what the browser actually did."></p>
           <select id="micSelect" class="hidden" aria-label="Microphone" data-help="Input device::Choose which microphone the tuner listens to. A clip-on or USB microphone hears your instrument more clearly than a laptop’s built-in one."></select>
         </div>
         <div class="field advanced-only">
@@ -160,6 +164,10 @@
         <div class="row between advanced-only">
           <span class="field-label">Measurements</span>
           <button class="switch" id="detailSw" aria-label="Show measurements" data-help="Measurements::Show the full table under the strings: measured and target frequency, the difference in hertz and cents, nearest note, reference pitch and how confident the reading is."></button>
+        </div>
+        <div class="row between">
+          <span class="field-label">Left-handed</span>
+          <button class="switch" id="leftySw" aria-label="Left-handed layout" data-help="Left-handed::For left-handed guitar, bass, ukulele and other instruments: the strings run from highest to lowest, and these settings move to the left side of the screen. Also in Settings."></button>
         </div>
       </aside>
     </div>
@@ -202,7 +210,7 @@
             </div>
             <button class="btn small" id="toneFromTarget" data-help="Play the target::Set the tone to the string or note you are tuning to.">Use target</button>
           </div>
-          <div class="slider-row"><span>Volume</span><input type="range" id="toneVol" min="0" max="1" step="0.01" aria-label="Tone volume" data-help="Volume::Loudness of the reference tone."><b id="toneVolV"></b></div>
+          <div class="slider-row"><span>Volume</span><input type="range" id="toneVol" min="0" max="2" step="0.01" aria-label="Tone volume" data-help="Volume::Loudness of the reference tone, up to 200%."><b id="toneVolV"></b></div>
         </div>
       </div>
 
@@ -216,13 +224,13 @@
       <div class="card">
         <h3>Recent notes <button class="btn small ghost" id="historyClear" data-help="Clear::Empty this list. It is never saved and disappears when you close the page.">Clear</button></h3>
         <p class="sub">Notes you held in tune, this session only.</p>
-        <ol class="history" id="history"></ol>
+        <ol class="history" id="history" data-pitch="bare"></ol>
       </div>
 
       <div class="card span">
         <h3>My tunings</h3>
         <p class="sub">Your own tunings, saved in this browser.</p>
-        <div class="list" id="myTunings"></div>
+        <div class="list" id="myTunings" data-pitch="bare"></div>
         <div class="row" style="margin-top:12px">
           <button class="btn small" id="newTuning" data-help="New tuning::Create a tuning for any instrument with up to 12 strings.">New tuning</button>
           <button class="btn small ghost" id="tunerReset" data-help="Restore defaults::Put the tuner settings back as they were: A4 = 440 Hz, ±3 cents, Auto strings. Your tunings are kept.">Restore defaults</button>
@@ -242,7 +250,7 @@
             <span class="bpm" id="bpmNum" data-help="Tempo::Beats per minute. Change it with the slider, the buttons, the arrow keys or Tap.">100</span>
             <span class="bpm-unit">BPM</span>
           </div>
-          <div class="marking" id="marking" data-help="Tempo marking::The traditional Italian term for this tempo. The ranges are conventions; the full table is in Tools.">Moderato</div>
+          <div class="marking" id="marking" data-i18n="text-off" data-help="Tempo marking::The traditional Italian term for this tempo. The ranges are conventions; the full table is in Tools.">Moderato</div>
           <div class="beatcount" id="beatcount"></div>
         </div>
       </div>
@@ -310,10 +318,14 @@
       <div class="field">
         <label>Volume</label>
         <div class="row nowrap">
-          <input type="range" id="masterVol" min="0" max="1" step="0.01" aria-label="Master volume" style="flex:1;min-width:0;width:auto" data-help="Volume::Overall loudness of the metronome and of the tuning tones.">
+          <input type="range" id="masterVol" min="0" max="2" step="0.01" aria-label="Master volume" style="flex:1;min-width:0;width:auto" data-help="Volume::Overall loudness of the metronome and of the tuning tones, up to 200%.">
           <button class="icon-btn" id="muteBtn" aria-label="Mute" data-help="Mute::Silence the output while the metronome keeps time. Key: M">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path class="wave" d="M16 9a4 4 0 0 1 0 6"/><path class="cross" d="M16 9l5 6M21 9l-5 6"/></svg></button>
         </div>
+      </div>
+      <div class="row between">
+        <span class="field-label">Floating metronome</span>
+        <button class="switch" id="floatSw" aria-label="Floating metronome" data-help="Floating metronome::A small metronome with the beats, the time signature, tempo buttons, play and stop. It pops out over your other tabs and apps where the browser allows it, and stays in a corner of the page when you scroll away from the big one."></button>
       </div>
       <div class="row advanced-only between">
         <span class="field-label">Visual</span>
@@ -468,7 +480,7 @@
       <div class="card">
         <h3>Tempo markings</h3>
         <p class="sub">Traditional Italian terms and their approximate ranges.</p>
-        <table id="markingTable" data-help="Tempo markings::The marking for your current tempo is highlighted."></table>
+        <table id="markingTable" data-i18n="text-off" data-help="Tempo markings::The marking for your current tempo is highlighted."></table>
       </div>
       <div class="card">
         <h3>Keyboard shortcuts</h3>
@@ -495,29 +507,89 @@
   </div>
 </div>
 <div class="dlg" id="prefs-dlg" role="dialog" aria-modal="true" aria-labelledby="prefs-title" hidden>
-  <div class="dlg-box" tabindex="-1"><span class="dlg-grip"></span><button class="dlg-x" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-    <h2 id="prefs-title">Preferences</h2>
-    <div class="pref-section">
-      <span class="field-label">Theme</span>
-      <div class="seg" id="themeSeg">
-        <button data-v="light" data-help="Light::Light background in every palette.">Light</button>
-        <button data-v="dark" data-help="Dark::Dark background in every palette. Easier on the eyes on stage or at night.">Dark</button>
-        <button data-v="auto" data-help="Auto::Follows your device: light by day, dark when your device switches to dark mode.">Auto</button>
+  <div class="dlg-box settings-box" tabindex="-1"><span class="dlg-grip"></span><button class="dlg-x" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    <h2 id="prefs-title">Settings</h2>
+    <nav class="set-nav" id="setNav" aria-label="Sections">
+      <button type="button" class="chip" data-go="set-language">Language</button>
+      <button type="button" class="chip" data-go="set-appearance">Appearance</button>
+      <button type="button" class="chip" data-go="set-access">Accessibility</button>
+      <button type="button" class="chip" data-go="set-tuner">Tuner</button>
+      <button type="button" class="chip" data-go="set-metronome">Metronome</button>
+    </nav>
+
+    <section class="set-group" id="set-language" aria-labelledby="set-language-h">
+      <h3 class="set-h" id="set-language-h">Language and notation</h3>
+      <div class="pref-section" id="langSection" data-help="Language::The language of the whole app, tuner and metronome. Note names and note values follow it, unless you choose another notation below.">
+        <label class="field-label" for="langSelect">Language</label>
+        <select id="langSelect" class="lang-select" translate="no"></select>
       </div>
-    </div>
-    <div class="pref-section">
-      <span class="field-label">Colors</span>
-      <div class="palettes" id="palettes"></div>
-    </div>
-    <div class="pref-section">
-      <span class="field-label">Note names</span>
-      <div class="seg" id="termsSeg">
-        <button data-v="us" data-help="American::Quarter note, eighth note, sixteenth note…">American</button>
-        <button data-v="uk" data-help="British::Crotchet, quaver, semiquaver…">British</button>
-        <button data-v="both" data-help="Both::Shows the American name with the British one beside it.">Both</button>
+      <div class="pref-section">
+        <span class="field-label" id="notationLabel">Music notation</span>
+        <div class="notation-list" id="notationList" role="radiogroup" aria-labelledby="notationLabel"></div>
+        <p class="terms-example"><span class="ex-label">Example</span> <span id="termsExample" translate="no"></span></p>
       </div>
-      <p class="terms-example" id="termsExample"></p>
-    </div>
+    </section>
+
+    <section class="set-group" id="set-appearance" aria-labelledby="set-appearance-h">
+      <h3 class="set-h" id="set-appearance-h">Appearance</h3>
+      <div class="pref-section">
+        <span class="field-label">Theme</span>
+        <div class="seg" id="themeSeg">
+          <button data-v="light" data-help="Light::Light background in every palette.">Light</button>
+          <button data-v="dark" data-help="Dark::Dark background in every palette. Easier on the eyes on stage or at night.">Dark</button>
+          <button data-v="auto" data-help="Auto::Follows your device: light by day, dark when your device switches to dark mode.">Auto</button>
+        </div>
+      </div>
+      <div class="pref-section">
+        <span class="field-label">Colors</span>
+        <div class="palettes" id="palettes"></div>
+      </div>
+    </section>
+
+    <section class="set-group" id="set-access" aria-labelledby="set-access-h">
+      <h3 class="set-h" id="set-access-h">Accessibility</h3>
+      <div class="set-row">
+        <div class="set-text"><span class="set-name" id="fsName">Text size</span><span class="set-desc">Labels, buttons and help text throughout the app.</span></div>
+        <span class="stepper set-step" role="group" aria-labelledby="fsName" data-help="Text size::Make the app’s text smaller or larger, from 80% to 160%. The tuner’s note and the tempo have their own size in Stand mode.">
+          <button type="button" id="fsMinus" aria-label="Smaller text">−</button><output id="fsVal" translate="no">100%</output><button type="button" id="fsPlus" aria-label="Larger text">+</button>
+        </span>
+      </div>
+      <div class="set-row">
+        <div class="set-text"><span class="set-name">Stand mode</span><span class="set-desc">Large readouts you can see from a music stand: the note, the tuning direction, the tempo and the beats.</span></div>
+        <button class="switch" id="standSw" aria-label="Stand mode" data-help="Stand mode::Enlarges the tuner’s gauge and note and the metronome’s ring and tempo, and moves the settings below them, so you can read them from a distance."></button>
+      </div>
+      <div class="set-row sub" id="standSizeRow">
+        <div class="set-text"><span class="set-name" id="standName">Stand mode size</span></div>
+        <span class="stepper set-step" role="group" aria-labelledby="standName" data-help="Stand mode size::How large the readouts are in Stand mode, from 120% to 200%.">
+          <button type="button" id="standMinus" aria-label="Smaller readouts">−</button><output id="standVal" translate="no">140%</output><button type="button" id="standPlus" aria-label="Larger readouts">+</button>
+        </span>
+      </div>
+      <div class="set-row">
+        <div class="set-text"><span class="set-name">High contrast</span><span class="set-desc">Black and white with bold borders. Works in light and dark.</span></div>
+        <button class="switch" id="contrastSw" aria-label="High contrast" data-help="High contrast::Switches to the High contrast palette. Turn it off to go back to the colors you had before."></button>
+      </div>
+      <div class="set-row">
+        <div class="set-text"><span class="set-name">Colorblind-safe tuner</span><span class="set-desc">In tune is blue, out of tune is orange: colors that stay distinct with every common type of color blindness.</span></div>
+        <button class="switch" id="cvdSw" aria-label="Colorblind-safe tuner colors" data-help="Colorblind-safe tuner::Replaces the tuner’s in-tune and out-of-tune colors with a blue and an orange that people with red-green or blue-yellow color blindness can tell apart. The arrows and the check mark still show the direction."></button>
+      </div>
+      <div class="cvd-preview" aria-hidden="true"><span class="cv ok"><i></i>In tune</span><span class="cv off"><i></i>Out of tune</span></div>
+    </section>
+
+    <section class="set-group" id="set-tuner" aria-labelledby="set-tuner-h">
+      <h3 class="set-h" id="set-tuner-h">Tuner</h3>
+      <div class="set-row">
+        <div class="set-text"><span class="set-name">Left-handed</span><span class="set-desc">Strings run from highest to lowest, and the tuner’s settings move to the left side of the screen.</span></div>
+        <button class="switch" id="leftySw2" aria-label="Left-handed layout" data-help="Left-handed::For left-handed guitar, bass, ukulele and other instruments. The arrow keys follow the strings as you see them."></button>
+      </div>
+    </section>
+
+    <section class="set-group" id="set-metronome" aria-labelledby="set-metronome-h">
+      <h3 class="set-h" id="set-metronome-h">Metronome</h3>
+      <div class="set-row">
+        <div class="set-text"><span class="set-name">Floating metronome</span><span class="set-desc" id="floatDesc">A small metronome that floats over your other tabs and apps, and in a corner of the page when you scroll away from the big one.</span></div>
+        <button class="switch" id="floatSw2" aria-label="Floating metronome" data-help="Floating metronome::Shows the beats of your time signature, the time signature, tempo buttons, play and stop. Also in the metronome’s quick settings."></button>
+      </div>
+    </section>
   </div>
 </div>
 
@@ -554,14 +626,14 @@
 <div class="dlg" id="about-dlg" role="dialog" aria-modal="true" aria-labelledby="about-title" hidden>
   <div class="dlg-box" tabindex="-1"><span class="dlg-grip"></span><button class="dlg-x" data-close aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     <svg class="logo about-logo" aria-hidden="true" focusable="false"><use href="#logo-mark" width="100%" height="100%"/></svg>
-    <h2 id="about-title" class="app-name">Metronome &amp; Tuner</h2>
-    <div class="version">Version <b id="appVersion">1.4.0</b><span id="appReleased">November 2026</span></div>
+    <h2 id="about-title" class="app-name" translate="no">Metronome &amp; Tuner</h2>
+    <div class="version">Version <b id="appVersion">2.3.0</b><span id="appReleased">November 2026</span></div>
     <p class="motto-line">Made for musicians, by a musician</p>
     <p>A chromatic tuner and a practice metronome, built to be used every day. Free, not for profit, with no accounts, ads or tracking.</p>
     <div class="about-links">
       <button class="btn small" data-open="feedback">Feedback</button>
       <button class="btn small" data-open="privacy">Privacy</button>
-      <button class="btn small" data-open="prefs">Preferences</button>
+      <button class="btn small" data-open="prefs">Settings</button>
       <button class="btn small" data-open="shortcuts">Keyboard shortcuts</button>
     </div>
     <p class="credits">Designed and built by @sayrolivares. Typefaces: Outfit and Fraunces, by their project authors, under the SIL Open Font License. The tuner analyses sound on your device, and every sound you hear is synthesized in your browser.</p>
@@ -577,9 +649,14 @@
       <h3 id="editorTitle">New tuning</h3>
       <label class="field"><span class="field-label">Name</span><input class="input" id="edName" maxlength="40" autocomplete="off" placeholder="Nashville high strung"></label>
       <label class="field"><span class="field-label">Instrument</span><select id="edInst"></select></label>
-      <label class="field"><span class="field-label">Strings, lowest first</span><input class="input" id="edNotes" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="E2 A2 D3 G3 B3 E4"></label>
-      <div class="ed-preview" id="edPreview" aria-live="polite"></div>
-      <p class="ed-errors" id="edErrors" role="alert"></p>
+      <label class="field"><span class="field-label">Strings, lowest first</span><input class="input" id="edNotes" data-pitch="bare" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="E2 A2 D3 G3 B3 E4"></label>
+      <div class="ed-strings" id="edPreview" aria-live="polite" data-pitch="bare"></div>
+      <div class="ed-tools">
+        <button type="button" class="btn small" id="edAdd" data-help="Add a string::Adds a string a fourth above the highest one. Up to 12 strings.">Add a string</button>
+        <button type="button" class="btn small ghost" id="edRemove" data-help="Remove a string::Removes the highest string.">Remove a string</button>
+        <span class="note">− and + move a string by a semitone</span>
+      </div>
+      <p class="ed-errors" id="edErrors" role="alert" translate="no"></p>
       <div class="row between">
         <button type="button" class="btn small ghost danger" id="edDelete">Delete</button>
         <div class="row">
@@ -617,17 +694,17 @@
     <p data-standalone-only style="margin-top:6px"><a href="privacy.html" target="_blank" rel="noopener">Open as a separate page</a></p>
   </div>
 </div>
-<div class="tip" id="tip" role="tooltip"><div class="tip-title"></div><div class="tip-body"></div><span class="tip-arrow"></span></div>
+<div class="tip" id="tip" role="tooltip" data-i18n="off"><div class="tip-title"></div><div class="tip-body"></div><span class="tip-arrow"></span></div>
 <div class="toast" id="toast" role="status"></div>
 
 <script src="js/version.js"></script>
 <script src="js/rhythm.js"></script>
-<script src="js/terms.js"></script>
 <script src="js/sounds.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/store.js"></script>
 <script src="js/help.js"></script>
 <script src="js/dialogs.js"></script>
+<script src="js/mini.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/notes.js"></script>
 <script src="js/pitch.js"></script>

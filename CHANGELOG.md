@@ -1,5 +1,53 @@
 # Changelog
 
+## 2.3.0
+
+A Settings panel with accessibility options, a left-handed tuner, a floating metronome and an easier way to make your own tuning.
+
+### Settings
+- The palette icon in the header is now a **gear: Settings**. Language and notation, theme and colors, accessibility, the tuner and the metronome each have a section, with shortcuts at the top of the panel.
+
+### Accessibility
+- **Text size** from 80 % to 160 %, with − and +. It scales the labels, buttons and help text everywhere; the header stops growing at 115 % so it always fits on a phone.
+- **Stand mode**, with its own − and + size (120 % to 200 %): the tuner's gauge, note, frequency and direction and the metronome's ring, tempo and buttons grow so you can read them from a music stand; the settings move below them.
+- **High contrast palette** (black, white, bold borders, thicker focus rings), in light and dark. It is listed with the other palettes and has its own switch under Accessibility, which goes back to your previous palette when switched off.
+- **Colorblind-safe tuner**: in tune is blue and out of tune is orange (Okabe–Ito colors, distinct for red-green and blue-yellow color blindness), on the needle, band, note, cents, status, string marks, signal quality and the signal view. Arrows and the check mark still carry the direction.
+
+### Tuner
+- **Left-handed layout** (switch in the tuner's settings card and in Settings): strings run from highest to lowest, the tuner's settings card moves to the left, the instrument name and Auto/Manual swap sides, and ← → follow the strings as drawn.
+- **Create a custom tuning** is now at the top of every instrument in the tuning picker. It starts from that instrument's tuning (the one in use, or its standard), and each string has − and + to move it a semitone, plus Add a string and Remove a string. Lowered strings are spelled as flats (E♭), raised ones as sharps (F♯), in the notation in use. Typing notes still works.
+
+### Metronome
+- **Floating metronome** (switch in the quick settings, in Simple and Advanced, and in Settings): a small widget with the beats of the bar (accents shown by size), the time signature, the tempo with − and + (hold to repeat), play/pause and stop, in the colors of the current theme.
+  - It **pops out over your other tabs and apps** in a picture-in-picture window. Chrome, Edge, Brave and Opera on computers get the full clickable widget; Chrome on Android and Safari get a live picture of it, with play/pause and ± tempo on the window's media buttons. Firefox can't pop it out.
+  - In the page it **docks in a corner** whenever the big metronome is scrolled out of view, for example while editing sounds or practice tools. × switches it off.
+  - Starting it from the pop-out while the tuner is open switches the app to the metronome, as the metronome only plays on its own page.
+
+### Other
+- "Reset all settings" in the metronome keeps the accessibility, layout and floating-metronome choices.
+- All new text is translated into Spanish, German, Italian, French and Dutch, with British spelling (colour, colour-blind) in British English.
+- Tests: new browser tests for Settings (text size, Stand mode, high contrast, colorblind-safe colors, saved and restored before the first paint), the left-handed layout and arrow keys, the custom tuning editor (including German notation), the floating metronome (pop-out window and dock), and layouts at 160 % text with Stand mode at 200 % from 320 px phones to desktop. The palette contrast test covers High contrast.
+
+## 2.2.0
+
+Louder sound, and the whole app in six languages, each with its own music notation.
+
+### Sound
+- **Volume up to 200 %.** Master volume (metronome and tuning tones) and the tuner's reference tone now go to 200 %. Measured: at 200 % the click is about 8 dB louder than 2.1 at its 80 % default (close to twice as loud to the ear) and never exceeds full scale, even with accents, subdivisions and polyrhythm stacked.
+- A limiter and a soft safety clipper at the end of the chain keep loud settings clean instead of distorting. The default is now 100 %.
+
+### Languages and notation
+- **English, Spanish, German, Italian, French and Dutch**, for the tuner, the metronome, every help hint, message and the privacy page. The first visit follows your browser's language; change it under Preferences › Language. British English (colour, crotchet, practise) is its own option.
+- **Notation follows the language**: C D E F G A B in English, Do Re Mi Fa Sol La Si in Spanish, Italian and French, German letters with H for B and B for B♭ (Fis, Es, As…), Dutch letters with Bes, Cis, Es… Note values too: quarter note, crotchet, negra, semiminima, noire, Viertelnote, kwartnoot.
+- **Another notation without changing the language** (Preferences › Music notation): for example Spanish with German notation, or British English with German notation. The language's own name is shown in parentheses: note names with the notation first, "H (Si)", "Fis (Fa♯)"; note values with your language first, "negra (Viertelnote)", "crotchet (Viertelnote)". Nothing is added when the names only differ by an accent (Re, Ré).
+- The tuner's strings, big note, targets, tone generator and the custom tuning editor all use the chosen notation; the editor also accepts notes typed in it (Si3, Fis2, Bes1) as well as English.
+- Octaves keep scientific numbering (middle C is C4) in every language. Italian tempo markings, brand names and the app's name stay as they are.
+- Settings from earlier versions carry over: "American", "British" and "both" note names become English, British English, and English with British notation.
+
+### Tests and docs
+- Translation tests: every language has the same keys and placeholders, every string on the page and in the code is translated, notes in text are converted with the right glosses. Notation tests for every system, parsing and migration. A browser test switches to Spanish with German notation and back. A volume test checks the clamp and that the safety curve never reaches full scale.
+- `docs/LANGUAGES.md`: how translation works and how to add a language.
+
 ## 2.1.0
 
 The app is now called **Metronome & Tuner** (same logo), and the tuner's audio processing has been rebuilt for phones, low strings and noisy rooms.

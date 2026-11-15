@@ -6,6 +6,12 @@
 (function (root) {
   const MN = (root.MN = root.MN || {});
   const N = MN.notes, T = MN.tunings;
+  /* note names on screen follow the notation chosen in Settings (js/notation.js);
+     text is translated by js/i18n.js, which also converts notes like E2 inside sentences */
+  const NT = MN.notation, I = MN.i18n;
+  const tr = (s) => (I ? I.tr(s) : s);
+  const shown = (midi, flats) => (NT ? NT.display(midi, flats) : N.name(midi, flats));
+  const midiOf = (n) => (n.octave + 1) * 12 + n.pc;
   const $ = (s, c = document) => c.querySelector(s);
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const svg = (tag, attrs = {}) => { const e = document.createElementNS(SVG_NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
@@ -100,10 +106,17 @@
     const stringsEl = $('#strings'), measure = $('#measure'), sigQ = $('#sigQuality'), micProc = $('#micProc');
     const dbToPct = (db) => Math.max(0, Math.min(100, ((db + 80) / 80) * 100));   // −80…0 dBFS
 
+    const noteGloss = $('#noteGloss');
+    let shownNote = null;
     function setNote(n) {
+      shownNote = n;
       const [l, a, o] = noteEl.children;
-      l.textContent = n ? n.letter : ''; a.textContent = n ? n.accidental : ''; o.textContent = n ? String(n.octave) : '';
-      noteEl.setAttribute('aria-label', n ? `Note ${n.letter}${n.accidental === '♯' ? ' sharp' : n.accidental === '♭' ? ' flat' : ''} ${n.octave}` : 'No note');
+      const d = n ? shown(midiOf(n), n.accidental === '♭') : null;
+      l.textContent = d ? d.letter : ''; a.textContent = d ? d.accidental : ''; o.textContent = d ? String(d.octave) : '';
+      const len = d ? d.letter.length + (d.accidental ? 1 : 0) : 1;
+      noteEl.classList.toggle('long', len === 3); noteEl.classList.toggle('xlong', len > 3);
+      noteGloss.textContent = d && d.gloss ? d.gloss : '';
+      noteEl.setAttribute('aria-label', n ? tr(`Note ${n.text}`) : tr('No note'));
     }
     function semis(c) { const s = Math.round(Math.abs(c) / 100); return s >= 1 ? `, about ${s} semitone${s > 1 ? 's' : ''}` : ''; }
     function targetName(m) {
@@ -184,18 +197,19 @@
       const now = performance.now();
       if (key === view.announced || now - view.announceAt < 1500) return;
       view.announced = key; view.announceAt = now;
-      announce.textContent = m.hasPitch && !m.faded ? `${m.note ? m.note.text.replace('♯', ' sharp').replace('♭', ' flat') : ''}, ${text}` : text;
+      announce.textContent = m.hasPitch && !m.faded ? `${m.note ? tr(m.note.text) : ''}, ${tr(text)}` : tr(text);
     }
 
     /* ================= strings ================= */
     function buildStrings() {
       stringsEl.textContent = '';
       tuning.strings.forEach((st, i) => {
-        const name = N.name(st.midi, tuning.flats);
-        const b = el('button', { class: 'string', type: 'button', 'data-i': i,
+        const name = shown(st.midi, tuning.flats);
+        const len = name.letter.length + (name.accidental ? 1 : 0);
+        const b = el('button', { class: 'string' + (len > 2 ? ' long' : ''), type: 'button', 'data-i': i,
           help: `${st.label} string::${N.hz(T.stringFreq(tuning, i, S().a4, S().temperament))} Hz at A4 = ${N.hz(S().a4, 1)} Hz. Tap to tune this string (Manual). Keys: ← →`,
           onclick: () => store.set({ stringMode: 'manual', stringIndex: i }) },
-        el('span', { class: 'sl' }, name.letter + name.accidental, el('small', { text: String(name.octave) })));
+        el('span', { class: 'sl', translate: 'no' }, name.letter + name.accidental, el('small', { text: String(name.octave) })));
         stringsEl.append(b);
       });
       stringsEl.classList.toggle('freq-mode', S().targetMode === 'freq');
@@ -210,7 +224,7 @@
         b.classList.toggle('tuned', tuned);
         b.setAttribute('aria-pressed', String(s.stringMode === 'manual' && i === s.stringIndex));
         const st = tuning.strings[i];
-        b.setAttribute('aria-label', `${st.label.replace('♯', ' sharp').replace('♭', ' flat')} string${tuned ? ', in tune' : ''}`);
+        b.setAttribute('aria-label', `${st.label} string${tuned ? ', in tune' : ''}`);
       });
     }
 
@@ -327,15 +341,19 @@
       const p = engine.state === 'listening' || engine.state === 'suspended' ? engine.processing : null;
       micProc.hidden = !p;
       if (!p) return;
-      const list = (keys) => { const n = keys.map((k) => PROC_NAMES[k]); return n.length > 1 ? n.slice(0, -1).join(', ') + ' and ' + n[n.length - 1] : n[0]; };
+      const list = (keys) => (I ? I.list(keys.map((k) => tr(PROC_NAMES[k]))) : keys.map((k) => PROC_NAMES[k]).join(', '));
+      const t = (src, vars) => (I ? I.t(src, vars) : src.replace(/\{(\w+)\}/g, (_, k) => vars[k]));
       const unknown = Object.keys(PROC_NAMES).filter((k) => p[k] === null);
       let text;
       if (p.on.length) {
-        text = `This browser kept ${list(p.on)} on. The tuner still works`
-          + (p.on.includes('noiseSuppression') ? '; a long note may fade sooner, so pluck again if the reading drops' : '')
-          + (p.on.includes('autoGainControl') ? '; the end of a note is judged by how clear it is rather than how loud' : '') + '.';
-      } else if (unknown.length === 3) text = 'Raw sound requested (echo cancellation, noise suppression and automatic gain off); this browser doesn’t report whether it complied.';
-      else text = 'Raw sound: ' + list(Object.keys(PROC_NAMES).filter((k) => p[k] === false)) + ' off' + (unknown.length ? ` (${list(unknown)} not reported)` : '') + '.';
+        text = t('This browser kept {list} on. The tuner still works.', { list: list(p.on) })
+          + (p.on.includes('noiseSuppression') ? ' ' + tr('A long note may fade sooner, so pluck again if the reading drops.') : '')
+          + (p.on.includes('autoGainControl') ? ' ' + tr('The end of a note is judged by how clear it is rather than how loud.') : '');
+      } else if (unknown.length === 3) text = tr('Raw sound requested (echo cancellation, noise suppression and automatic gain off); this browser doesn’t report whether it complied.');
+      else {
+        const off = list(Object.keys(PROC_NAMES).filter((k) => p[k] === false));
+        text = unknown.length ? t('Raw sound: {list} off ({unknown} not reported).', { list: off, unknown: list(unknown) }) : t('Raw sound: {list} off.', { list: off });
+      }
       micProc.textContent = text;
       micProc.classList.toggle('warn', p.on.length > 0);
     }
@@ -344,7 +362,7 @@
       view.devices = list;
       micSelect.textContent = '';
       micSelect.append(el('option', { value: '', text: 'System default' }));
-      for (const d of list) if (d.id !== 'default') micSelect.append(el('option', { value: d.id, text: d.label }));
+      for (const d of list) if (d.id !== 'default') micSelect.append(el('option', { value: d.id, text: d.label, translate: 'no' }));   // the device's own name
       micSelect.value = list.some((d) => d.id === S().deviceId) ? S().deviceId : '';
       micSelect.classList.toggle('hidden', list.filter((d) => d.id !== 'default').length < 2);
     }
@@ -387,9 +405,10 @@
     /* reference tone */
     const toneSw = $('#toneSw'), toneNote = $('#toneNote'), toneOct = $('#toneOct'), toneHz = $('#toneHz'), toneVol = $('#toneVol'), toneVolV = $('#toneVolV');
     function fillToneNotes() {
-      const names = S().accidentals === 'flat' ? N.FLATS : N.SHARPS, cur = toneNote.value;
+      const flats = S().accidentals === 'flat', cur = toneNote.value;
+      const names = NT ? NT.pitchNames(flats, true) : flats ? N.FLATS : N.SHARPS;
       toneNote.textContent = '';
-      names.forEach((n, pc) => toneNote.append(el('option', { value: pc, text: n })));
+      names.forEach((n, pc) => toneNote.append(el('option', { value: pc, text: n, translate: 'no' })));
       if (cur) toneNote.value = cur;
     }
     for (let o = 0; o <= 8; o++) toneOct.append(el('option', { value: o, text: String(o) }));
@@ -418,7 +437,7 @@
       const near = N.nearest(s.toneHz, s.a4, s.temperament);
       if (near) { toneNote.value = String(N.pcOf(near.midi)); toneOct.value = String(Math.max(0, Math.min(8, Math.floor(near.midi / 12) - 1))); }
       if (document.activeElement !== toneHz) toneHz.value = N.fixed(s.toneHz, 2);
-      toneVol.value = s.toneVolume; toneVol.style.setProperty('--fill', s.toneVolume * 100 + '%');
+      toneVol.value = s.toneVolume; toneVol.style.setProperty('--fill', (s.toneVolume / 2) * 100 + '%');
       toneVolV.textContent = Math.round(s.toneVolume * 100) + '%';
       tone.set({ freq: s.toneHz, wave: s.toneWave, volume: s.toneVolume });
     }
@@ -426,7 +445,7 @@
     /* ================= signal view (Advanced) ================= */
     const scope = $('#scope'), sigStats = $('#sigStats');
     let scopeCtx = null, colors = null;
-    const readColors = () => { const cs = getComputedStyle(document.documentElement); colors = { line: cs.getPropertyValue('--accent').trim(), grid: cs.getPropertyValue('--line').trim(), ok: cs.getPropertyValue('--ok').trim() }; };
+    const readColors = () => { const cs = getComputedStyle(document.documentElement); colors = { line: cs.getPropertyValue('--tune-off').trim(), grid: cs.getPropertyValue('--line').trim(), ok: cs.getPropertyValue('--tune-ok').trim() }; };
     function scopeVisible() { return !document.body.classList.contains('simple') && document.body.dataset.view === 'tuner' && scope.offsetParent !== null; }
     function drawScope(reading) {
       if (!scopeVisible()) return;
@@ -482,14 +501,16 @@
     const instPicks = $('#instPicks'), tuningList = $('#tuningList'), editor = $('#tuningEditor');
     let dlgInst = 'guitar', editingId = null;
     function renderTuningHeader() {
+      if (tuning.custom) tuningName.setAttribute('translate', 'no'); else tuningName.removeAttribute('translate');
       tuningName.textContent = tuning.instrumentId === 'chromatic' ? 'Chromatic' : tuning.name;
       tuningInst.textContent = tuning.instrumentId === 'chromatic' ? 'Any note' : tuning.custom ? `${T.instrumentName(tuning.instrumentId)}, my tuning` : T.instrumentName(tuning.instrumentId);
     }
-    const chips = (t) => el('span', { class: 'note-chips', 'aria-hidden': 'true' }, ...t.strings.map((s) => el('span', { text: s.label })));
+    const chips = (t) => el('span', { class: 'note-chips', 'aria-hidden': 'true', 'data-pitch': 'bare' }, ...t.strings.map((s) => el('span', { text: s.label })));
     function tuningRow(t) {
-      const label = t.strings.length ? `${t.name}: ${t.strings.map((s) => s.label).join(' ')}` : t.name;
-      return el('button', { class: 'tuning-row', type: 'button', role: 'listitem', 'aria-current': String(t.id === tuning.id), 'aria-label': label, onclick: () => { store.set({ tuningId: t.id }); MN.dialogs.close(); } },
-        el('span', {}, el('span', { class: 'rn', text: t.name }), t.alias || t.meta ? el('span', { class: 'ra', text: t.alias || t.meta }) : null),
+      const name = t.custom ? t.name : tr(t.name);
+      const label = t.strings.length ? `${name}: ${t.strings.map((s) => s.label).join(' ')}` : name;
+      return el('button', { class: 'tuning-row', type: 'button', role: 'listitem', 'aria-current': String(t.id === tuning.id), 'aria-label': label, 'data-pitch': 'bare', onclick: () => { store.set({ tuningId: t.id }); MN.dialogs.close(); } },
+        el('span', {}, el('span', { class: 'rn', text: t.name, translate: t.custom ? 'no' : null }), t.alias || t.meta ? el('span', { class: 'ra', text: t.alias || t.meta }) : null),
         t.strings.length ? chips(t) : el('span', { class: 'ra', text: 'Every note, nearest pitch' }));
     }
     function renderDialog() {
@@ -498,17 +519,35 @@
       for (const [id, name] of tabs) instPicks.append(el('button', { class: 'chip' + (id === dlgInst ? ' on' : ''), role: 'tab', 'aria-selected': String(id === dlgInst), text: name, onclick: () => { dlgInst = id; editor.hidden = true; renderDialog(); } }));
       tuningList.textContent = '';
       tuningList.hidden = !editor.hidden;
+      tuningList.append(createButton(dlgInst));
       if (dlgInst === 'mine') {
         const mine = custom.list();
         if (!mine.length) tuningList.append(el('p', { class: 'empty-line', text: 'No tunings of your own yet. Create one for any instrument with up to 12 strings.' }));
         for (const t of mine) tuningList.append(el('div', { class: 'mine-row' }, tuningRow(t), el('button', { class: 'btn small ghost', type: 'button', text: 'Edit', 'aria-label': `Edit ${t.name}`, onclick: () => openEditor(t.id) })));
-        tuningList.append(el('div', { class: 'row', style: 'margin-top:12px' }, el('button', { class: 'btn small', type: 'button', text: 'New tuning', onclick: () => openEditor(null) })));
       } else {
         const inst = T.instrument(dlgInst);
         for (const raw of inst.tunings) tuningList.append(tuningRow(T.preset(raw.id)));
       }
       const on = instPicks.querySelector('.on');
       if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+    /* The way in to your own tuning, at the top of every instrument: it starts from that
+       instrument's tuning (the one in use, or its standard), so changing one or two strings
+       is all it takes. */
+    function baseFor(instId) {
+      const inst = instId && instId !== 'mine' && instId !== 'chromatic' ? T.instrument(instId) : null;
+      if (!inst) return null;
+      return tuning.instrumentId === instId && !tuning.custom ? tuning : T.preset(inst.tunings[0].id);
+    }
+    function createButton(instId) {
+      const base = baseFor(instId);
+      const plus = svg('svg', { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': 2.4, 'stroke-linecap': 'round', 'aria-hidden': 'true' });
+      plus.append(svg('path', { d: 'M12 5v14M5 12h14' }));
+      return el('button', { class: 'tune-create', type: 'button', id: 'tuneCreate', onclick: () => openEditor(null, base ? { instrumentId: instId, notes: base.strings.map((x) => x.label).join(' ') } : null),
+        help: 'Create a custom tuning::Start from this instrument’s tuning and raise or lower any string, add or remove strings, then give it a name. It is saved in this browser, under My tunings.' },
+        el('span', { class: 'tc-plus' }, plus),
+        el('span', { class: 'tc-text' }, el('b', { text: 'Create a custom tuning' }),
+          el('span', { class: 'tc-sub', text: base ? `Start from ${T.instrumentName(instId)}, ${base.name}, and change any string` : 'For any instrument with up to 12 strings' })));
     }
     $('#tunings-dlg').addEventListener('dlg-open', () => { if (!editingFromCard) { dlgInst = tuning.custom ? 'mine' : tuning.instrumentId; editor.hidden = true; } editingFromCard = false; renderDialog(); });
 
@@ -517,33 +556,91 @@
     let editingFromCard = false;
     for (const i of T.INSTRUMENTS) if (i.id !== 'chromatic') edInst.append(el('option', { value: i.id, text: i.name }));
     edInst.append(el('option', { value: T.CUSTOM_INSTRUMENT.id, text: T.CUSTOM_INSTRUMENT.name }));
-    function openEditor(id) {
+    let startNotes = null;   // the notes a new tuning started from, while untouched
+    function openEditor(id, start) {
       editingId = id;
       const rec = id ? custom.raw(id) : null;
       $('#editorTitle').textContent = rec ? 'Edit tuning' : 'New tuning';
       edName.value = rec ? rec.name : '';
-      edInst.value = rec ? rec.instrumentId : tuning.instrumentId !== 'chromatic' ? tuning.instrumentId : 'guitar';
-      edNotes.value = rec ? rec.notes : tuning.strings.map((s) => s.label).join(' ');
+      edInst.value = rec ? rec.instrumentId : start && start.instrumentId ? start.instrumentId : tuning.instrumentId !== 'chromatic' ? tuning.instrumentId : 'guitar';
+      edNotes.value = toSystem(rec ? rec.notes : start && start.notes != null ? start.notes : tuning.instrumentId !== 'chromatic' ? tuning.strings.map((s) => s.label).join(' ') : instNotes(edInst.value));
+      startNotes = rec ? null : edNotes.value;
       $('#edDelete').hidden = !rec;
       edErrors.textContent = '';
       editor.hidden = false; tuningList.hidden = true;
       preview();
       edName.focus();
     }
+    /* The editor speaks the notation in use: a German musician sees and types "H3" and
+       "Fis3", a Spanish one "Si3" and "Fa♯3". What is saved is always the app's own format
+       (E2, F♯3, B♭1), so a tuning reads the same after switching notation. */
+    const parseTok = (tok) => (NT ? NT.parseNote(tok) : N.parse(tok));
+    /* was the note written as a flat? (E♭, Eb, Sib, Es, As, Bes, and German B) — spelled the same way when saved */
+    const flatTok = (tok) => {
+      const h = tok.replace(/\s+/g, '').replace(/-?\d$/, '');
+      return /♭/.test(h) || /^([a-g]|do|re|ré|mi|fa|sol|la|si)b{1,2}$/i.test(h) || (/(es|as)$/i.test(h) && !/is$/i.test(h)) || (/^b$/i.test(h) && !!NT && NT.system === 'de');
+    };
+    function toSystem(notes) {
+      if (!NT) return notes;
+      return T.tokens(notes).map((tok) => { const m = N.parse(tok); return m === null ? tok : NT.display(m, /♭|b/.test(tok.slice(1))).text; }).join(' ');
+    }
+    function toCanonical(notes) {
+      return T.tokens(notes).map((tok) => { const m = parseTok(tok); return m === null ? tok : N.label(m, flatTok(tok)); }).join(' ');
+    }
+    /* each string as a card: − and + move it a semitone, in the notation in use */
+    const instNotes = (id) => { const i = T.instrument(id); return i && i.tunings[0] ? toSystem(i.tunings[0].notes) : ''; };
+    const edAdd = $('#edAdd'), edRemove = $('#edRemove');
+    let refocus = null;
     function preview() {
       edPreview.textContent = '';
-      for (const tok of T.tokens(edNotes.value).slice(0, T.MAX_STRINGS + 2)) {
-        const midi = N.parse(tok);
+      const toks = T.tokens(edNotes.value);
+      toks.slice(0, T.MAX_STRINGS + 2).forEach((tok, i) => {
+        const midi = parseTok(tok);
         const ok = midi !== null && N.validFreq(N.midiToFreq(midi, S().a4));
-        edPreview.append(el('span', { class: ok ? '' : 'bad' }, ok ? N.label(midi, /♭|b/.test(tok.slice(1))) : tok, ok ? el('em', { text: N.hz(N.midiToFreq(midi, S().a4, S().temperament)) }) : null));
-      }
+        const card = el('div', { class: 'ed-str' + (ok ? '' : ' bad'), role: 'group', 'aria-label': `String ${i + 1}` });
+        if (ok) {
+          const d = shown(midi, flatTok(tok));
+          card.append(
+            el('button', { type: 'button', text: '+', 'data-k': `${i}+`, 'aria-label': `Raise string ${i + 1} a semitone`, onclick: () => nudge(i, 1) }),
+            el('span', { class: 'es-n', translate: 'no' }, d.letter + d.accidental, el('small', { text: String(d.octave) })),
+            el('span', { class: 'es-hz', text: N.hz(N.midiToFreq(midi, S().a4, S().temperament)), title: N.hz(N.midiToFreq(midi, S().a4, S().temperament)) + ' Hz' }),
+            el('button', { type: 'button', text: '−', 'data-k': `${i}-`, 'aria-label': `Lower string ${i + 1} a semitone`, onclick: () => nudge(i, -1) }));
+        } else card.append(el('span', { class: 'es-n', translate: 'no', text: tok }), el('span', { class: 'es-i', text: 'Not a note' }));
+        edPreview.append(card);
+      });
+      edAdd.disabled = toks.length >= T.MAX_STRINGS;
+      edRemove.disabled = toks.length < 1;
+      if (refocus) { const b = edPreview.querySelector(`[data-k="${refocus}"]`); if (b) b.focus({ preventScroll: true }); refocus = null; }
     }
+    function setTokens(toks) { edNotes.value = toks.join(' '); preview(); }
+    function noteText(midi, flat) { return NT ? NT.display(midi, flat).text : N.label(midi, flat); }
+    function nudge(i, d) {
+      const toks = T.tokens(edNotes.value);
+      const midi = parseTok(toks[i]);
+      if (midi === null || !N.validFreq(N.midiToFreq(midi + d, S().a4))) return;
+      toks[i] = noteText(midi + d, d < 0);   // down-tuned strings read as flats (E♭), raised ones as sharps (F♯)
+      refocus = `${i}${d > 0 ? '+' : '-'}`;
+      setTokens(toks);
+    }
+    edAdd.addEventListener('click', () => {
+      const toks = T.tokens(edNotes.value);
+      if (toks.length >= T.MAX_STRINGS) return;
+      const mids = toks.map(parseTok).filter((m) => m !== null);
+      const next = mids.length ? Math.max(...mids) + 5 : 40;    // a fourth above the highest string, or E2
+      toks.push(noteText(N.validFreq(N.midiToFreq(next, S().a4)) ? next : Math.max(...mids), false));
+      setTokens(toks);
+    });
+    edRemove.addEventListener('click', () => { const toks = T.tokens(edNotes.value); toks.pop(); setTokens(toks); });
+    edInst.addEventListener('change', () => {
+      /* a new tuning nobody has edited yet follows the instrument chosen */
+      if (!editingId && edNotes.value === startNotes) { edNotes.value = startNotes = instNotes(edInst.value) || edNotes.value; preview(); }
+    });
     edNotes.addEventListener('input', preview);
     editor.addEventListener('submit', (e) => {
       e.preventDefault();
-      const data = { name: edName.value, instrumentId: edInst.value, notes: edNotes.value };
+      const data = { name: edName.value, instrumentId: edInst.value, notes: toCanonical(edNotes.value) };
       const r = editingId ? custom.update(editingId, data) : custom.create(data);
-      if (!r.ok) { edErrors.textContent = r.errors.join(' '); return; }
+      if (!r.ok) { edErrors.textContent = r.errors.map(tr).join(' '); return; }
       if (r.saved === false) toast('Saved for now, but this browser won’t keep it after you close the page');
       else toast(editingId ? 'Tuning updated' : 'Tuning saved');
       store.set({ tuningId: r.id });
@@ -554,7 +651,7 @@
     $('#edCancel').addEventListener('click', () => { editor.hidden = true; renderDialog(); });
     $('#edDelete').addEventListener('click', () => {
       const rec = editingId && custom.raw(editingId);
-      if (!rec || !confirm(`Delete “${rec.name}”? This can’t be undone.`)) return;
+      if (!rec || !confirm(I ? I.t('Delete “{=name}”? This can’t be undone.', { name: rec.name }) : `Delete “${rec.name}”? This can’t be undone.`)) return;
       custom.remove(editingId);
       if (S().tuningId === editingId) store.set({ tuningId: T.DEFAULT_TUNING });
       toast('Tuning deleted');
@@ -569,14 +666,14 @@
       if (!mine.length) { myTunings.append(el('div', { class: 'empty', text: 'No tunings of your own yet.' })); return; }
       for (const t of mine) {
         myTunings.append(el('div', { class: 'item' },
-          el('div', {}, el('div', { text: t.name }), el('div', { class: 'meta', text: `${T.instrumentName(t.instrumentId)}: ${t.strings.map((s) => s.label).join(' ')}` })),
+          el('div', {}, el('div', { text: t.name, translate: 'no' }), el('div', { class: 'meta', text: `${T.instrumentName(t.instrumentId)}: ${t.strings.map((s) => s.label).join(' ')}` })),
           el('div', { class: 'acts' },
             el('button', { class: 'btn small ghost', text: t.id === tuning.id ? 'In use' : 'Use', disabled: t.id === tuning.id, onclick: () => store.set({ tuningId: t.id }) }),
             el('button', { class: 'btn small ghost', text: 'Edit', 'aria-label': `Edit ${t.name}`, onclick: () => { editingFromCard = true; dlgInst = 'mine'; MN.dialogs.open('tunings'); openEditor(t.id); } }))));
       }
     }
     $('#newTuning').addEventListener('click', () => { editingFromCard = true; dlgInst = 'mine'; MN.dialogs.open('tunings'); openEditor(null); });
-    $('#tunerReset').addEventListener('click', () => { if (confirm('Restore the tuner settings to their defaults? Your tunings are kept.')) { store.reset(); toast('Tuner settings restored'); } });
+    $('#tunerReset').addEventListener('click', () => { if (confirm(tr('Restore the tuner settings to their defaults? Your tunings are kept.'))) { store.reset(); toast('Tuner settings restored'); } });
 
     /* ================= keyboard ================= */
     document.addEventListener('keydown', (e) => {
@@ -585,8 +682,10 @@
       if (e.key === ' ') { e.preventDefault(); if (!e.repeat) toggleListening(); }
       else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && n) {
         e.preventDefault();
-        const cur = s.stringMode === 'manual' ? s.stringIndex : view.m && view.m.stringIndex >= 0 ? view.m.stringIndex : e.key === 'ArrowRight' ? -1 : n;
-        store.set({ stringMode: 'manual', stringIndex: Math.max(0, Math.min(n - 1, cur + (e.key === 'ArrowRight' ? 1 : -1))) });
+        /* left-handed: the strings are drawn highest first, so → goes to a lower string */
+        const up = (e.key === 'ArrowRight') !== !!(appStore && appStore.get().leftHanded);
+        const cur = s.stringMode === 'manual' ? s.stringIndex : view.m && view.m.stringIndex >= 0 ? view.m.stringIndex : up ? -1 : n;
+        store.set({ stringMode: 'manual', stringIndex: Math.max(0, Math.min(n - 1, cur + (up ? 1 : -1))) });
       }
     });
     document.addEventListener('keyup', (e) => { if (e.key === ' ' && document.body.dataset.view === 'tuner' && !isTyping(e.target) && e.target.tagName === 'BUTTON') e.preventDefault(); });
@@ -647,7 +746,15 @@
       if (e.detail.view !== 'tuner') { if (engine.listening) engine.stop('view'); if (tone.playing) { tone.stop(); toneSw.classList.remove('on'); } }
       else if (scopeCtx) readColors();
     });
-    if (appStore) appStore.subscribe((s, patch) => { if ('theme' in patch || 'palette' in patch) colors = null, scopeCtx = null; if ('mode' in patch && s.mode === 'advanced') { renderHistory(); if (S().detailed) renderMeasure(view.m); } });
+    if (appStore) appStore.subscribe((s, patch) => { if ('theme' in patch || 'palette' in patch || 'cvd' in patch) colors = null, scopeCtx = null; if ('mode' in patch && s.mode === 'advanced') { renderHistory(); if (S().detailed) renderMeasure(view.m); } });
+
+    /* after a language or notation change: names drawn by this code follow it */
+    if (I) I.onChange(() => {
+      setNote(shownNote); buildStrings(); fillToneNotes(); renderTone(S()); renderTuningHeader(); renderLibrary();
+      renderMicStatus(); historyKey = null; renderHistory();
+      if (!$('#tunings-dlg').hidden) { if (!editor.hidden) preview(); else renderDialog(); }
+      render(view.m && engine.listening ? view.m : idleModel());
+    });
 
     /* first paint */
     fillToneNotes();
